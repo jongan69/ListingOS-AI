@@ -206,6 +206,8 @@ Local Worker execution is useful for route development. OAuth callbacks, public 
 - [Submission package](docs/DEVPOST_SUBMISSION.md)
 - [Final submission checklist](docs/SUBMISSION_CHECKLIST.md)
 - [ListingOS Market execution plan](docs/LISTINGOS_MARKETPLACE_PLAN.md)
+- [Operations and deployment](docs/OPERATIONS.md)
+- [Release and device validation](docs/RELEASE.md)
 
 ## Security
 
