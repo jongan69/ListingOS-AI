@@ -115,7 +115,7 @@ https://listingos.expo.app
 Code repo URL:
 
 ```text
-https://github.com/jongan69/ListingOS
+https://github.com/jongan69/ListingOS-AI
 ```
 
 Judge test link and instructions:
@@ -123,7 +123,7 @@ Judge test link and instructions:
 ```text
 Web demo: https://listingos.expo.app
 
-Repo: https://github.com/jongan69/ListingOS
+Repo: https://github.com/jongan69/ListingOS-AI
 
 Judge note: the backend Worker is deployed at https://seller-ai-platform.jonathang132298.workers.dev and the app uses real eBay OAuth and production eBay APIs. The safest testing path is the built-in proof mode on Home, which is fixture-backed and non-mutating. If you use a live seller account or a sandbox-configured Worker instead, do not press Publish against a production account unless you intend to create a real fixed-price eBay listing. The demo video remains the safest end-to-end proof surface.
 ```
@@ -149,7 +149,7 @@ Not applicable. ListingOS is a mobile seller app, not a plugin or developer tool
 - Submitter type, country, category, public repo, judge instructions, feedback session ID, and non-plugin status are saved.
 - Jonathan Gan's public contribution statement is saved.
 - Thumbnail uploaded to Devpost and available at `https://d112y698adiu2z.cloudfront.net/photos/production/software_thumbnail_photos/004/909/119/datas/medium.png`.
-- Public repository is available at `https://github.com/jongan69/ListingOS` with `main` as the default branch.
+- Public repository is available at `https://github.com/jongan69/ListingOS-AI` with `main` as the default branch.
 - Production web app is deployed at `https://listingos.expo.app`.
 - A clean 3:2 gallery capture is ready at `artifacts/devpost/listingos-home-3x2.png`.
 
@@ -160,7 +160,7 @@ Not applicable. ListingOS is a mobile seller app, not a plugin or developer tool
 | Submitter type | Individual |
 | Country | United States |
 | Category | Work & Productivity |
-| Repository | `https://github.com/jongan69/ListingOS` |
+| Repository | `https://github.com/jongan69/ListingOS-AI` |
 | Project/test URL | `https://listingos.expo.app` |
 | Feedback session | `019f6944-d662-7d11-8a6d-5ecc9906c817` |
 | Plugin/developer-tool instructions | Not applicable |

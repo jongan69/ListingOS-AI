@@ -15,9 +15,9 @@ The composition is rendered with the Remotion installation in `/Users/jonathanga
 ```sh
 cd /Users/jonathangan/Desktop/ClipCaptionAI
 ./node_modules/.bin/remotion render \
-  /Users/jonathangan/Documents/ebay-ai-simple-listing/ListingOS-Hackathon-Demo-Assets/remotion/listingos-demo-entry.tsx \
+  /Users/jonathangan/Documents/ListingOS-AI/ListingOS-Hackathon-Demo-Assets/remotion/listingos-demo-entry.tsx \
   ListingOSDemo \
-  /Users/jonathangan/Documents/ebay-ai-simple-listing/ListingOS-Hackathon-Demo-Assets/final-renders/listingos-horizontal-demo-remotion-v1.mp4
+  /Users/jonathangan/Documents/ListingOS-AI/ListingOS-Hackathon-Demo-Assets/final-renders/listingos-horizontal-demo-remotion-v1.mp4
 ```
 
 The render command expects these files in ClipCaptionAI's `public/` folder:

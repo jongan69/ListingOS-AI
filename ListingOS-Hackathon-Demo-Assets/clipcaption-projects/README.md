@@ -17,11 +17,11 @@ From the ClipCaptionAI repository, run:
 
 ```sh
 npm run caption:auto -- \
-  --video /Users/jonathangan/Documents/ebay-ai-simple-listing/ListingOS-Hackathon-Demo-Assets/final-renders/listingos-horizontal-demo-remotion-v1.mp4 \
-  --captions /Users/jonathangan/Documents/ebay-ai-simple-listing/ListingOS-Hackathon-Demo-Assets/clipcaption-projects/listingos-caption-pass-v1-speech-only-v3/assets/listingos-horizontal-demo-remotion-v1.captions.json \
-  --style-config /Users/jonathangan/Documents/ebay-ai-simple-listing/ListingOS-Hackathon-Demo-Assets/clipcaption-projects/listingos-horizontal-caption-style.json \
+  --video /Users/jonathangan/Documents/ListingOS-AI/ListingOS-Hackathon-Demo-Assets/final-renders/listingos-horizontal-demo-remotion-v1.mp4 \
+  --captions /Users/jonathangan/Documents/ListingOS-AI/ListingOS-Hackathon-Demo-Assets/clipcaption-projects/listingos-caption-pass-v1-speech-only-v3/assets/listingos-horizontal-demo-remotion-v1.captions.json \
+  --style-config /Users/jonathangan/Documents/ListingOS-AI/ListingOS-Hackathon-Demo-Assets/clipcaption-projects/listingos-horizontal-caption-style.json \
   --run-name listingos-caption-pass-v1-speech-only-v3 \
-  --out-dir /Users/jonathangan/Documents/ebay-ai-simple-listing/ListingOS-Hackathon-Demo-Assets/clipcaption-projects \
+  --out-dir /Users/jonathangan/Documents/ListingOS-AI/ListingOS-Hackathon-Demo-Assets/clipcaption-projects \
   --fps 30 --width 1920 --height 1080 --fit cover --position center-bottom
 ```
 
