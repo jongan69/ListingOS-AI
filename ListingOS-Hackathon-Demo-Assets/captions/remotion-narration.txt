@@ -1,0 +1,13 @@
+Meet ListingOS, a camera-first AI listing machine for eBay sellers.
+
+Selling online should feel closer to posting a story than completing a marketplace form. Start with a few clear photos of one product, choose the speed-to-profit strategy, and keep moving. ListingOS keeps the work visible in a queue instead of forcing the seller to stare at a loading screen.
+
+While the seller starts the next item, the backend stores the media, groups the product photos, and builds a structured draft. GPT generates the title, category, condition notes, item specifics, description, confidence, and pricing guidance. The seller gets strong defaults instead of a blank form.
+
+This is still seller-controlled. The review screen keeps everything important together: reorder the photo strip, change the lead image, adjust the price strategy, edit the title or copy, and fix only the field that actually matters. The goal is less typing, not less control.
+
+Before anything goes live, ListingOS verifies the draft against eBay requirements. Required fields and policy blockers surface in plain language. If a safe automatic fix is available, the queue can retry that step. If not, the item stays editable instead of disappearing into an API error.
+
+The verified Android flow shows the full loop: real product photos, asynchronous processing, one-page review, publish confirmation, and a buyer-facing eBay listing. The broader test matrix covers books, cards, cameras, accessories, electronics, and household products, so the workflow is not limited to one perfect demo item.
+
+ListingOS turns product photos into verified eBay listings, giving sellers a faster assembly line for moving real inventory.

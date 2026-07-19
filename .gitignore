@@ -1,0 +1,73 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+dist-update-ios/
+dist-update-android/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist
+firebase-service-account*.json
+google-play-service-account*.json
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env
+.env.*
+!.env.example
+!.dev.vars.example
+.env*.local
+.ebay-seller-auth.json
+.dev.vars
+.wrangler/
+
+# typescript
+*.tsbuildinfo
+worker-configuration.d.ts
+
+# tests
+coverage/
+
+# generated native folders
+/ios
+/android
+
+# large local demo recordings are kept outside Git; notes and placeholders remain tracked
+ListingOS-Hackathon-Demo-Assets/raw-screen-recordings/*.mp4
+ListingOS-Hackathon-Demo-Assets/raw-screen-recordings/*.mov
+ListingOS-Hackathon-Demo-Assets/raw-screen-recordings/**/*.mp4
+ListingOS-Hackathon-Demo-Assets/raw-screen-recordings/**/*.mov
+ListingOS-Hackathon-Demo-Assets/final-renders/*.mp4
+ListingOS-Hackathon-Demo-Assets/rotato-exports/*.mp4
+ListingOS-Hackathon-Demo-Assets/rotato-exports/**/*.mp4
+ListingOS-Hackathon-Demo-Assets/clipcaption-projects/**/*.mp4
+ListingOS-Hackathon-Demo-Assets/audio/*
+
+# local QA history and superseded media-tool runs
+ListingOS-Hackathon-Demo-Assets/screenshots/qa-attempts/
+ListingOS-Hackathon-Demo-Assets/clipcaption-projects/listingos-caption-pass-v1/

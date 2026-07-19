@@ -1,0 +1,17 @@
+Photos in. Listing out.
+Meet ListingOS — the camera-first AI listing machine for eBay sellers.
+Taking product photos is fast. Turning them into a real eBay listing is slow.
+ListingOS compresses the whole thing into one flow.
+Sign in with your real eBay account.
+Pick 3-8 photos of one product.
+A Cloudflare Worker stores them in R2 and queues the jobs.
+GPT-5.6 builds structured listing intelligence — not vague suggestions.
+Title. Category. Condition. Item specifics. Description. Confidence. Pricing ladder.
+One review page. Not a giant form.
+Edit anything — but the AI already picked strong defaults.
+Before publish, every draft is verified against eBay requirements.
+Blockers surface inline. Fixes flow back through the backend.
+Publish is fixed-price first, through the eBay Inventory API.
+This is a real listing on eBay. Not a mockup.
+Built with Codex. Powered by GPT-5.6. Running on Cloudflare.
+ListingOS — photos in, verified eBay listing out.

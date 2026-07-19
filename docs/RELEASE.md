@@ -1,0 +1,170 @@
+# Release And Demo Packaging
+
+ListingOS can be demoed as a standalone Android app without Expo Go, Metro, or a USB cable after installation.
+
+## Current Demo Build
+
+- App name: `ListingOS`
+- Android package: `com.jongan69.listingos`
+- Deep-link scheme: `listingos://`
+- Backend: `https://seller-ai-platform.jonathang132298.workers.dev`
+- Gradle APK: `android/app/build/outputs/apk/release/app-release.apk`
+- Demo APK copy: `dist/release/ListingOS-android-demo-release.apk`
+
+## Local Standalone Android Build
+
+```sh
+npm run check
+npm run worker:check
+npm run build:android:release
+npm run install:android:release
+npm run open:android
+```
+
+After `install:android:release`, the app is installed on the phone and runs from the launcher without the computer connected. It uses the deployed Cloudflare Worker, not Metro.
+
+If more than one Android target is connected, install explicitly:
+
+```sh
+adb -s R5CY51SFSDL install -r android/app/build/outputs/apk/release/app-release.apk
+adb -s R5CY51SFSDL shell monkey -p com.jongan69.listingos -c android.intent.category.LAUNCHER 1
+```
+
+The local `assembleRelease` APK is suitable for demos and local recording. Store distribution should use EAS or Play signing credentials instead of the local debug/demo signing setup.
+
+### Verified Android fallback build
+
+On July 18, 2026, the current source produced and installed a fresh `arm64-v8a` release APK after Gradle's final incremental splitter failed under its default worker configuration. The successful cached packaging command was:
+
+```sh
+ANDROID_HOME=/Users/jonathangan/Library/Android/sdk \
+ANDROID_SDK_ROOT=/Users/jonathangan/Library/Android/sdk \
+./gradlew :app:packageRelease --no-daemon --stacktrace \
+  --info -Dorg.gradle.workers.max=1 \
+  -PreactNativeArchitectures=arm64-v8a -x lintVitalAnalyzeRelease
+```
+
+The resulting 71 MB APK was installed on Samsung A16 serial `R5CY51SFSDL`; the app launched with PID `18418` and no `FATAL EXCEPTION` or `AndroidRuntime` crash was observed in the post-launch log window. This is a local demo verification, not a replacement for a signed store build.
+
+## EAS Internal Build
+
+Use this when you want a shareable install link without manually sending an APK:
+
+```sh
+npx eas-cli@latest build -p android --profile preview
+```
+
+The `preview` profile produces an Android APK for internal testing.
+
+## Web Release
+
+Build and exercise the server-rendered web artifact before assigning the production alias:
+
+```sh
+npm run web:verify
+npm run web:serve
+```
+
+After the local smoke test passes, deploy the existing `dist` artifact to a preview URL first. Promote only the reviewed artifact to production:
+
+```sh
+npx eas-cli@latest deploy --export-dir dist
+npx eas-cli@latest deploy --prod --export-dir dist
+```
+
+The production web build keeps Proof Mode disabled unless `EXPO_PUBLIC_PROOF_MODE=true` is explicitly provided for a dedicated judge/demo deployment. Deploy the Worker CORS allowlist change before or alongside the web release, and verify `/`, a dynamic draft URL, and an unknown route after promotion.
+
+## Store Builds
+
+Android Play Store:
+
+```sh
+npm run eas:build:android
+```
+
+iOS App Store or TestFlight:
+
+```sh
+npm run eas:build:ios
+```
+
+Store submission requires Apple Developer / Google Play Console accounts and signed store credentials. Use platform-specific submits so one platform can move even if the other is blocked:
+
+```sh
+npm run eas:submit:ios
+npm run eas:submit:android
+```
+
+The Android submit profile targets the Play `internal` track with `releaseStatus: draft` so uploads do not accidentally ship to production.
+
+Before store builds, configure push credentials:
+
+- Android: Firebase project `listingos-jongan69` must have `google-services.json` at the repo root, and EAS must have the FCM V1 key assigned.
+- iOS: EAS must have Apple build credentials, APNs key, and App Store Connect API key assigned for `com.jongan69.listingos`. Production EAS builds set the APNs entitlement to `production`; local/dev builds set it to `development`.
+- Full push checklist: `docs/PUSH_NOTIFICATIONS.md`.
+
+Convenience scripts:
+
+```sh
+npm run eas:credentials:android
+npm run eas:credentials:ios
+npm run eas:build:android
+npm run eas:build:ios
+npm run eas:build:production
+npm run eas:submit:android
+npm run eas:submit:ios
+npm run eas:submit:production
+```
+
+## Current Release State
+
+- EAS project: `@jongan69/listingos`
+- Web production URL: `https://listingos.expo.app`
+- Cloudflare Worker: deployed and healthy
+- RevenueCat test entitlements: `starter`, `pro`, `studio`
+- Billing enforcement: `enforce`
+- Free usage allowance: `20` AI listing credits per month
+- iOS build `1.0.1 (16)`: submitted to App Store Connect/TestFlight on 2026-07-18; Apple processing is pending
+- Android build `1.0.1 (10)`: submitted to the Google Play internal track with `releaseStatus: draft` on 2026-07-18
+- iOS submission: `https://expo.dev/accounts/jongan69/projects/listingos/submissions/c826411e-2462-47e5-8fa7-47fa5c4f0f85`
+- Android submission: `https://expo.dev/accounts/jongan69/projects/listingos/submissions/4e2c3cf1-65f5-4290-ab4e-d8af3e5b44b5`
+- Android installed release APK: `android/app/build/outputs/apk/release/app-release.apk`
+- Android notification verification: a physical Samsung A16 registered a token and received a Worker-sent Expo/FCM notification on July 17, 2026
+- iOS notification delivery still requires a physical-device proof pass
+- Remote D1 migration `0008_draft_job_fingerprints.sql` is applied; the deployed Worker is healthy.
+- Android release intentionally uses cross-platform on-device photo-quality analysis; the experimental YOLOX runtime is not linked into the release build because its JSI/native binary caused Android startup and alignment risk.
+
+Note: App Store Connect previously reported the display name `ListingOS` as already taken during app-record creation and temporarily created the record as `ListingOS (44f5ee)`. Confirm the final display name in App Store Connect before public release.
+
+The Google Play Android Developer API is enabled. The current repository and submitted internal-track build use versionCode `10`.
+
+The Play submit service account is active in Play Console with app-scoped access to `ListingOS`, including app read access and `Release apps to testing tracks`. API access was verified by creating and deleting a temporary Android Publisher edit for `com.jongan69.listingos`, so `npm run eas:submit:android` can be used for future internal-track draft submissions.
+
+## Current Production Monetization Blockers
+
+- Cloudflare Worker billing enforcement is live and unsigned RevenueCat webhook calls are rejected.
+- Android Play subscription creation is blocked until the Google Play merchant account is set up and the Play service account receives monetization/product-management permission.
+- Google Play public production release is blocked by Play's closed testing requirement: at least 12 opted-in testers for at least 14 days before production access can be requested.
+- iOS subscription setup is blocked until App Store Connect is signed in and the paid app/subscription agreements, tax, and banking status are confirmed.
+- RevenueCat production app configs, production public SDK keys, the `default` offering, and the production webhook must be finalized after App Store Connect / Play subscription products exist.
+
+## Store Metadata
+
+Canonical launch copy lives in:
+
+- `docs/APP_STORE_COPY.md`
+- `store.config.json`
+
+Before pushing App Store metadata, replace any account-specific review contact details in App Store Connect and confirm that these URLs are live:
+
+- Privacy: `https://seller-ai-platform.jonathang132298.workers.dev/privacy`
+- Support: `https://seller-ai-platform.jonathang132298.workers.dev/app-support`
+- Marketing: `https://devpost.com/software/listingos`
+
+## Demo Safety
+
+- Use the release APK for recordings.
+- Do not use Expo Go in the demo.
+- Do not show `.env`, eBay credentials, OpenAI keys, or Cloudflare secrets.
+- Do not create extra production eBay listings unless the demo explicitly needs a live publish.
+- If publishing live, verify the buyer-facing listing and media before claiming success.

@@ -1,0 +1,103 @@
+{
+  "expo": {
+    "name": "ListingOS",
+    "slug": "listingos",
+    "description": "The camera-first AI listing machine for eBay sellers.",
+    "version": "1.0.1",
+    "orientation": "portrait",
+    "backgroundColor": "#08111F",
+    "icon": "./assets/icon.png",
+    "scheme": "listingos",
+    "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a1293177-1107-4f22-826b-1e885f6290b1",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jongan69.listingos",
+      "buildNumber": "18",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "softwareKeyboardLayoutMode": "resize",
+      "versionCode": 12,
+      "permissions": [
+        "INTERNET",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#050A1E",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.jongan69.listingos"
+    },
+    "web": {
+      "output": "server",
+      "favicon": "./assets/favicon.png",
+      "name": "ListingOS",
+      "shortName": "ListingOS",
+      "lang": "en",
+      "description": "Camera-first AI listing workflow for eBay sellers.",
+      "themeColor": "#08111F",
+      "backgroundColor": "#08111F",
+      "display": "standalone",
+      "orientation": "any"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "asyncRoutes": {
+            "web": "production"
+          },
+          "unstable_useServerRendering": true,
+          "headers": {
+            "Cache-Control": "no-store",
+            "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY"
+          }
+        }
+      ],
+      "expo-secure-store",
+      "expo-image",
+      "expo-asset",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "ListingOS uses the camera to photograph products and build listings."
+        }
+      ],
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "ListingOS uses the camera so you can photograph products directly in the app and turn them into eBay listings.",
+          "photosPermission": "ListingOS uses your photo library to import product photos for eBay listings."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a1293177-1107-4f22-826b-1e885f6290b1"
+      }
+    },
+    "owner": "jongan69"
+  }
+}

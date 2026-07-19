@@ -1,0 +1,21 @@
+Listing products online should not take 20 minutes per item.
+
+ListingOS turns product photos into optimized eBay listings.
+
+Start with a few photos.
+
+Choose how aggressive you want to be on speed versus profit.
+
+Then keep moving while the app builds the draft in the background.
+
+GPT-5.6 generates the listing structure, title, description, specifics, and pricing guidance.
+
+The seller lands on one fast review screen instead of filling out everything from scratch.
+
+You can review the title, pricing, category, condition, item specifics, and confidence before posting.
+
+The goal is simple: less friction, more speed, and better listings from the photos you already took.
+
+ListingOS.
+
+Photos in. Listing out.

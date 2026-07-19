@@ -1,0 +1,28 @@
+{
+  "createdAt": "2026-07-18T22:15:25.650Z",
+  "mode": "caption-auto",
+  "sourceVideo": "/Users/jonathangan/Documents/ebay-ai-simple-listing/ListingOS-Hackathon-Demo-Assets/final-renders/listingos-horizontal-demo-remotion-v1.mp4",
+  "runDir": "/Users/jonathangan/Documents/ebay-ai-simple-listing/ListingOS-Hackathon-Demo-Assets/clipcaption-projects/listingos-caption-pass-v1-speech-only-v3",
+  "assetsDir": "/Users/jonathangan/Documents/ebay-ai-simple-listing/ListingOS-Hackathon-Demo-Assets/clipcaption-projects/listingos-caption-pass-v1-speech-only-v3/assets",
+  "finalDir": "/Users/jonathangan/Documents/ebay-ai-simple-listing/ListingOS-Hackathon-Demo-Assets/clipcaption-projects/listingos-caption-pass-v1-speech-only-v3/final",
+  "captionsPath": "/Users/jonathangan/Documents/ebay-ai-simple-listing/ListingOS-Hackathon-Demo-Assets/clipcaption-projects/listingos-caption-pass-v1-speech-only-v3/assets/listingos-horizontal-demo-remotion-v1.captions.json",
+  "finalPath": "/Users/jonathangan/Documents/ebay-ai-simple-listing/ListingOS-Hackathon-Demo-Assets/clipcaption-projects/listingos-caption-pass-v1-speech-only-v3/final/listingos-horizontal-demo-remotion-v1.captioned.mp4",
+  "config": {
+    "styleConfigPath": "/Users/jonathangan/Documents/ebay-ai-simple-listing/ListingOS-Hackathon-Demo-Assets/clipcaption-projects/listingos-horizontal-caption-style.json",
+    "rendered": true
+  },
+  "metadata": {
+    "source": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "durationSeconds": 132.629333
+    },
+    "final": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "durationSeconds": 132.693333
+    }
+  }
+}

@@ -1,0 +1,650 @@
+diff --git a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/CameraViewModule.kt b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/CameraViewModule.kt
+index 21382f8..2bd8980 100644
+--- a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/CameraViewModule.kt
++++ b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/CameraViewModule.kt
+@@ -31,6 +31,7 @@ import expo.modules.interfaces.permissions.Permissions
+ import expo.modules.kotlin.Promise
+ import expo.modules.kotlin.exception.CodedException
+ import expo.modules.kotlin.exception.Exceptions
++import expo.modules.kotlin.functions.Coroutine
+ import expo.modules.kotlin.functions.Queues
+ import expo.modules.kotlin.modules.Module
+ import expo.modules.kotlin.modules.ModuleDefinition
+@@ -474,6 +475,10 @@ class CameraViewModule : Module() {
+       AsyncFunction("pausePreview") { view: ExpoCameraView ->
+         view.pausePreview()
+       }
++
++      (AsyncFunction("focusAtPoint") Coroutine { view: ExpoCameraView, x: Float, y: Float ->
++        view.focusAtPoint(x, y)
++      }).runOnQueue(Queues.MAIN)
+     }
+   }
+ 
+diff --git a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
+index 999a22c..4045fe1 100644
+--- a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
++++ b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
+@@ -27,6 +27,7 @@ import androidx.camera.core.CameraSelector
+ import androidx.camera.core.CameraState
+ import androidx.camera.core.DisplayOrientedMeteringPointFactory
+ import androidx.camera.core.FocusMeteringAction
++import androidx.camera.core.FocusMeteringResult
+ import androidx.camera.core.ImageAnalysis
+ import androidx.camera.core.ImageCapture
+ import androidx.camera.core.ImageCaptureException
+@@ -49,6 +50,7 @@ import androidx.camera.view.PreviewView
+ import androidx.core.app.ActivityCompat
+ import androidx.core.content.ContextCompat
+ import androidx.core.graphics.drawable.toDrawable
++import com.google.common.util.concurrent.ListenableFuture
+ import expo.modules.camera.analyzers.BarcodeAnalyzer
+ import expo.modules.camera.analyzers.toByteArray
+ import expo.modules.camera.common.BarcodeScannedEvent
+@@ -84,9 +86,15 @@ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.SupervisorJob
+ import kotlinx.coroutines.cancel
+ import kotlinx.coroutines.launch
++import kotlinx.coroutines.suspendCancellableCoroutine
+ import java.io.File
++import java.util.concurrent.CancellationException
++import java.util.concurrent.ExecutionException
++import java.util.concurrent.TimeUnit
+ import java.lang.Float.max
+ import java.lang.Float.min
++import kotlin.coroutines.resume
++import kotlin.coroutines.resumeWithException
+ import kotlin.math.roundToInt
+ import kotlin.properties.Delegates
+ 
+@@ -143,9 +151,12 @@ class ExpoCameraView(
+   )
+   private var shouldCreateCamera = false
+   private var previewPaused = false
++  private var focusRequestSequence = 0L
++  private var cameraGeneration = 0L
+ 
+   var lensFacing = CameraType.BACK
+     set(value) {
++      invalidateFocusRequests(cameraChanged = true)
+       field = value
+       shouldCreateCamera = true
+     }
+@@ -530,7 +541,9 @@ class ExpoCameraView(
+       }
+     }.build()
+ 
++    invalidateFocusRequests(cameraChanged = true)
+     cameraProvider.unbindAll()
++    camera = null
+     camera = cameraProvider.bindToLifecycle(currentActivity, cameraSelector, useCases)
+     camera?.let {
+       observeCameraState(it.cameraInfo)
+@@ -637,7 +650,7 @@ class ExpoCameraView(
+         previewView.height.toFloat()
+       )
+       val action = FocusMeteringAction.Builder(
+-        meteringPointFactory.createPoint(1f, 1f),
++        meteringPointFactory.createPoint(previewView.width / 2f, previewView.height / 2f),
+         FocusMeteringAction.FLAG_AF
+       )
+         .build()
+@@ -645,6 +658,111 @@ class ExpoCameraView(
+     }
+   }
+ 
++  suspend fun focusAtPoint(normalizedX: Float, normalizedY: Float): Map<String, String> {
++    val requestId = ++focusRequestSequence
++    val requestCameraGeneration = cameraGeneration
++    val activeCamera = camera ?: return focusResult("unsupported", "camera_unavailable")
++    val previewWidth = previewView.width
++    val previewHeight = previewView.height
++    if (previewWidth <= 0 || previewHeight <= 0) {
++      return focusResult("unsupported", "preview_not_ready")
++    }
++    if (!normalizedX.isFinite() || !normalizedY.isFinite()) {
++      return focusResult("failed", "invalid_point")
++    }
++
++    // JS passes normalized view coordinates. Converting them against the native
++    // PreviewView keeps density independent while PreviewView's factory applies
++    // crop, display rotation, and mirroring transforms to sensor coordinates.
++    val point = previewView.meteringPointFactory.createPoint(
++      normalizedX.coerceIn(0f, 1f) * previewWidth,
++      normalizedY.coerceIn(0f, 1f) * previewHeight
++    )
++    val focusOnlyAction = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
++      .setAutoCancelDuration(3, TimeUnit.SECONDS)
++      .build()
++    if (!activeCamera.cameraInfo.isFocusMeteringSupported(focusOnlyAction)) {
++      return focusResult("unsupported", "af_regions_unsupported")
++    }
++
++    val whiteBalanceOnlyAction = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AWB).build()
++    val preferredAction = FocusMeteringAction.Builder(
++      point,
++      FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
++    ).apply {
++      if (activeCamera.cameraInfo.isFocusMeteringSupported(whiteBalanceOnlyAction)) {
++        addPoint(point, FocusMeteringAction.FLAG_AWB)
++      }
++    }
++      .setAutoCancelDuration(3, TimeUnit.SECONDS)
++      .build()
++    val action = if (activeCamera.cameraInfo.isFocusMeteringSupported(preferredAction)) {
++      preferredAction
++    } else {
++      focusOnlyAction
++    }
++
++    return try {
++      val result = activeCamera.cameraControl.startFocusAndMetering(action).awaitFocusResult()
++      when {
++        requestCameraGeneration != cameraGeneration || camera !== activeCamera ->
++          focusResult("failed", "camera_changed")
++        requestId != focusRequestSequence ->
++          focusResult("failed", "superseded")
++        result.isFocusSuccessful ->
++          focusResult("focused")
++        else ->
++          focusResult("failed", "focus_not_acquired")
++      }
++    } catch (_: CancellationException) {
++      if (requestCameraGeneration != cameraGeneration || camera !== activeCamera) {
++        focusResult("failed", "camera_changed")
++      } else if (requestId != focusRequestSequence) {
++        focusResult("failed", "superseded")
++      } else {
++        focusResult("failed", "canceled")
++      }
++    } catch (exception: Exception) {
++      Log.w(CameraViewModule.TAG, "Tap focus request failed", exception)
++      focusResult("failed", "camera_error")
++    }
++  }
++
++  private fun invalidateFocusRequests(cameraChanged: Boolean = false) {
++    focusRequestSequence += 1
++    if (cameraChanged) {
++      cameraGeneration += 1
++    }
++  }
++
++  private fun focusResult(status: String, reason: String? = null): Map<String, String> {
++    Log.d(CameraViewModule.TAG, "Tap focus result: status=$status reason=${reason ?: "none"}")
++    return buildMap {
++      put("status", status)
++      reason?.let { put("reason", it) }
++    }
++  }
++
++  private suspend fun ListenableFuture<FocusMeteringResult>.awaitFocusResult(): FocusMeteringResult =
++    suspendCancellableCoroutine { continuation ->
++      addListener(
++        {
++          if (!continuation.isActive) {
++            return@addListener
++          }
++          try {
++            continuation.resume(get())
++          } catch (exception: ExecutionException) {
++            continuation.resumeWithException(exception.cause ?: exception)
++          } catch (exception: Exception) {
++            continuation.resumeWithException(exception)
++          }
++        },
++        ContextCompat.getMainExecutor(context)
++      )
++      continuation.invokeOnCancellation { cancel(false) }
++    }
++
+   private fun setCameraZoom(value: Float) {
+     val maxZoomRatio = camera?.cameraInfo?.zoomState?.value?.maxZoomRatio ?: 1f
+     val targetZoomRatio = max(1f, min(maxZoomRatio, value.coerceIn(0f, 1f) * maxZoomRatio))
+@@ -683,7 +801,9 @@ class ExpoCameraView(
+ 
+   fun pausePreview() {
+     previewPaused = true
++    invalidateFocusRequests(cameraChanged = true)
+     cameraProvider?.unbindAll()
++    camera = null
+   }
+ 
+   fun setShouldScanBarcodes(shouldScanBarcodes: Boolean) {
+@@ -862,8 +982,10 @@ class ExpoCameraView(
+ 
+   fun cleanupCamera() {
+     orientationEventListener.disable()
++    invalidateFocusRequests(cameraChanged = true)
+     cancelCoroutineScope()
+     cameraProvider?.unbindAll()
++    camera = null
+     glSurfaceTexture?.release()
+   }
+ }
+diff --git a/node_modules/expo-camera/build/Camera.types.d.ts b/node_modules/expo-camera/build/Camera.types.d.ts
+index 0ee50ec..f21948b 100644
+--- a/node_modules/expo-camera/build/Camera.types.d.ts
++++ b/node_modules/expo-camera/build/Camera.types.d.ts
+@@ -25,6 +25,12 @@ export type CameraRatio = '4:3' | '16:9' | '1:1';
+  * @default off
+  */
+ export type FocusMode = 'on' | 'off';
++export type CameraFocusStatus = 'started' | 'focused' | 'failed' | 'unsupported';
++export type CameraFocusFailureReason = 'camera_unavailable' | 'preview_not_ready' | 'invalid_point' | 'af_regions_unsupported' | 'camera_changed' | 'superseded' | 'focus_not_acquired' | 'canceled' | 'camera_error' | 'native_method_unavailable';
++export type CameraFocusResult = {
++    status: CameraFocusStatus;
++    reason?: CameraFocusFailureReason;
++};
+ /**
+  * This option specifies what codec to use when recording a video.
+  * @platform ios
+@@ -471,6 +477,7 @@ export interface CameraViewRef {
+     readonly launchModernScanner: () => Promise<void>;
+     readonly resumePreview: () => Promise<void>;
+     readonly pausePreview: () => Promise<void>;
++    readonly focusAtPoint?: (normalizedX: number, normalizedY: number) => Promise<CameraFocusResult>;
+ }
+ /**
+  * @hidden
+diff --git a/node_modules/expo-camera/build/CameraView.d.ts b/node_modules/expo-camera/build/CameraView.d.ts
+index da858fa..dda58b3 100644
+--- a/node_modules/expo-camera/build/CameraView.d.ts
++++ b/node_modules/expo-camera/build/CameraView.d.ts
+@@ -1,6 +1,6 @@
+ import { type EventSubscription } from 'expo-modules-core';
+ import { Component } from 'react';
+-import type { CameraCapturedPicture, CameraOrientation, CameraPictureOptions, CameraViewProps, CameraRecordingOptions, CameraViewRef, ScanningOptions, ScanningResult, VideoCodec, AvailableLenses } from './Camera.types';
++import type { CameraCapturedPicture, CameraFocusResult, CameraOrientation, CameraPictureOptions, CameraViewProps, CameraRecordingOptions, CameraViewRef, ScanningOptions, ScanningResult, VideoCodec, AvailableLenses } from './Camera.types';
+ import type { PictureRef } from './PictureRef';
+ export default class CameraView extends Component<CameraViewProps> {
+     /**
+@@ -48,6 +48,11 @@ export default class CameraView extends Component<CameraViewProps> {
+      * Pauses the camera preview. It is not recommended to use `takePictureAsync` when preview is paused.
+      */
+     pausePreview(): Promise<void>;
++    /**
++     * Focuses and meters at normalized coordinates in the camera preview.
++     * The result distinguishes an accepted request from confirmed focus acquisition.
++     */
++    focusAtPoint(normalizedX: number, normalizedY: number): Promise<CameraFocusResult>;
+     static ConversionTables: {
+         [prop: string]: unknown;
+         type: Record<keyof import("./Camera.types").CameraType, import("./Camera.types").CameraNativeProps["facing"]>;
+diff --git a/node_modules/expo-camera/build/CameraView.js b/node_modules/expo-camera/build/CameraView.js
+index 78f8198..d463e83 100644
+--- a/node_modules/expo-camera/build/CameraView.js
++++ b/node_modules/expo-camera/build/CameraView.js
+@@ -107,6 +107,16 @@ export default class CameraView extends Component {
+     async pausePreview() {
+         return this._cameraRef.current?.pausePreview();
+     }
++    /**
++     * Focuses and meters at normalized coordinates in the camera preview.
++     * The result distinguishes an accepted request from confirmed focus acquisition.
++     */
++    async focusAtPoint(normalizedX, normalizedY) {
++        return ((await this._cameraRef.current?.focusAtPoint?.(normalizedX, normalizedY)) ?? {
++            status: 'unsupported',
++            reason: 'native_method_unavailable',
++        });
++    }
+     // Values under keys from this object will be transformed to native options
+     static ConversionTables = ConversionTables;
+     static defaultProps = {
+diff --git a/node_modules/expo-camera/ios/CameraViewModule.swift b/node_modules/expo-camera/ios/CameraViewModule.swift
+index cccd73f..20cc13e 100644
+--- a/node_modules/expo-camera/ios/CameraViewModule.swift
++++ b/node_modules/expo-camera/ios/CameraViewModule.swift
+@@ -250,6 +250,10 @@ public final class CameraViewModule: Module, ScannerResultHandler {
+         view.pausePreview()
+       }
+ 
++      AsyncFunction("focusAtPoint") { (view: CameraView, normalizedX: Double, normalizedY: Double) in
++        return await view.focusAtPoint(normalizedX: normalizedX, normalizedY: normalizedY)
++      }
++
+       AsyncFunction("getAvailablePictureSizes") {
+         return PictureSize.allCases.map { $0.rawValue }
+       }
+diff --git a/node_modules/expo-camera/ios/Current/CameraView.swift b/node_modules/expo-camera/ios/Current/CameraView.swift
+index 7bf1b37..1ab06eb 100644
+--- a/node_modules/expo-camera/ios/Current/CameraView.swift
++++ b/node_modules/expo-camera/ios/Current/CameraView.swift
+@@ -1,4 +1,5 @@
+ import UIKit
++@preconcurrency import AVFoundation
+ @preconcurrency import ExpoModulesCore
+ import CoreMotion
+ 
+@@ -31,6 +32,8 @@ public class CameraView: ExpoView, EXAppLifecycleListener, EXCameraInterface, Ca
+   // Typed as Any? because AVCaptureDevice.RotationCoordinator is iOS 17+.
+   private var rotationCoordinator: Any?
+   private var previewRotationObservation: NSKeyValueObservation?
++  private var focusRequestSequence = 0
++  private var focusRestoreWorkItem: DispatchWorkItem?
+   private var didStartSession = false
+   private var motionManager: CMMotionManager = {
+     let mm = CMMotionManager()
+@@ -74,7 +77,11 @@ public class CameraView: ExpoView, EXAppLifecycleListener, EXCameraInterface, Ca
+ 
+   var presetCamera = AVCaptureDevice.Position.back {
+     didSet {
+-      sessionQueue.async {
++      sessionQueue.async { [weak self] in
++        guard let self else {
++          return
++        }
++        invalidateFocusRequests()
+         self.sessionManager.updateDevice()
+       }
+     }
+@@ -122,7 +129,13 @@ public class CameraView: ExpoView, EXAppLifecycleListener, EXCameraInterface, Ca
+ 
+   var active = true {
+     didSet {
+-      sessionQueue.async {
++      sessionQueue.async { [weak self] in
++        guard let self else {
++          return
++        }
++        if !active {
++          invalidateFocusRequests()
++        }
+         self.sessionManager.updateCameraIsActive()
+       }
+     }
+@@ -130,7 +143,11 @@ public class CameraView: ExpoView, EXAppLifecycleListener, EXCameraInterface, Ca
+ 
+   var selectedLens: String? {
+     didSet {
+-      sessionQueue.async {
++      sessionQueue.async { [weak self] in
++        guard let self else {
++          return
++        }
++        invalidateFocusRequests()
+         self.sessionManager.updateDevice()
+       }
+     }
+@@ -190,6 +207,173 @@ public class CameraView: ExpoView, EXAppLifecycleListener, EXCameraInterface, Ca
+     previewLayer.needsDisplayOnBoundsChange = true
+   }
+ 
++  func focusAtPoint(normalizedX: Double, normalizedY: Double) async -> [String: String] {
++    guard normalizedX.isFinite, normalizedY.isFinite else {
++      return focusResult("failed", reason: "invalid_point")
++    }
++
++    let devicePoint = await MainActor.run { [weak self] () -> CGPoint? in
++      guard let self, bounds.width > 0, bounds.height > 0,
++        let connection = previewLayer.connection, connection.isEnabled else {
++        return nil
++      }
++      let layerPoint = CGPoint(
++        x: min(max(normalizedX, 0), 1) * bounds.width,
++        y: min(max(normalizedY, 0), 1) * bounds.height
++      )
++      // Preview-layer conversion includes aspect-fill cropping, orientation, and mirroring.
++      return previewLayer.captureDevicePointConverted(fromLayerPoint: layerPoint)
++    }
++
++    guard let devicePoint else {
++      return focusResult("unsupported", reason: "preview_not_ready")
++    }
++
++    return await withCheckedContinuation { continuation in
++      sessionQueue.async { [weak self] in
++        guard let self else {
++          continuation.resume(returning: [
++            "status": "failed",
++            "reason": "camera_changed"
++          ])
++          return
++        }
++        continuation.resume(returning: configureFocus(at: devicePoint))
++      }
++    }
++  }
++
++  private func configureFocus(at point: CGPoint) -> [String: String] {
++    invalidateFocusRequests()
++    let requestSequence = focusRequestSequence
++
++    guard active, !isSessionPaused, session.isRunning, let device = sessionManager.currentDevice else {
++      return focusResult("unsupported", reason: "camera_unavailable")
++    }
++
++    let supportsFocusPoint = device.isFocusPointOfInterestSupported
++    let focusMode: AVCaptureDevice.FocusMode? = supportsFocusPoint
++      ? preferredFocusMode(for: device)
++      : nil
++    let supportsExposurePoint = device.isExposurePointOfInterestSupported
++    let exposureMode: AVCaptureDevice.ExposureMode? = supportsExposurePoint
++      ? preferredExposureMode(for: device)
++      : nil
++
++    guard supportsFocusPoint, focusMode != nil else {
++      applyExposurePointIfSupported(point, mode: exposureMode, to: device)
++      return focusResult("unsupported", reason: "af_regions_unsupported")
++    }
++
++    do {
++      try device.lockForConfiguration()
++      defer { device.unlockForConfiguration() }
++
++      if let exposureMode {
++        device.exposurePointOfInterest = point
++        device.exposureMode = exposureMode
++      }
++      if let focusMode {
++        device.focusPointOfInterest = point
++        device.focusMode = focusMode
++      }
++    } catch {
++      return focusResult("failed", reason: "camera_error")
++    }
++
++    scheduleContinuousFocusRestore(for: device, requestSequence: requestSequence)
++    // AVFoundation accepts point focus but does not expose a reliable success result.
++    // Report acceptance instead of claiming that optical focus was acquired.
++    return focusResult("started")
++  }
++
++  private func preferredFocusMode(for device: AVCaptureDevice) -> AVCaptureDevice.FocusMode? {
++    if device.isFocusModeSupported(.autoFocus) {
++      return .autoFocus
++    }
++    if device.isFocusModeSupported(.continuousAutoFocus) {
++      return .continuousAutoFocus
++    }
++    return nil
++  }
++
++  private func preferredExposureMode(for device: AVCaptureDevice) -> AVCaptureDevice.ExposureMode? {
++    if device.isExposureModeSupported(.continuousAutoExposure) {
++      return .continuousAutoExposure
++    }
++    if device.isExposureModeSupported(.autoExpose) {
++      return .autoExpose
++    }
++    return nil
++  }
++
++  private func applyExposurePointIfSupported(
++    _ point: CGPoint,
++    mode: AVCaptureDevice.ExposureMode?,
++    to device: AVCaptureDevice
++  ) {
++    guard let mode else {
++      return
++    }
++    do {
++      try device.lockForConfiguration()
++      defer { device.unlockForConfiguration() }
++      device.exposurePointOfInterest = point
++      device.exposureMode = mode
++    } catch {
++      // Exposure-only metering is best effort when point focus is unsupported.
++    }
++  }
++
++  private func scheduleContinuousFocusRestore(
++    for device: AVCaptureDevice,
++    requestSequence: Int,
++    attempt: Int = 0
++  ) {
++    guard device.isFocusModeSupported(.continuousAutoFocus) else {
++      return
++    }
++
++    let workItem = DispatchWorkItem { [weak self, weak device] in
++      guard let self, let device,
++        requestSequence == focusRequestSequence,
++        sessionManager.currentDevice?.uniqueID == device.uniqueID else {
++        return
++      }
++
++      if device.isAdjustingFocus && attempt < 12 {
++        scheduleContinuousFocusRestore(for: device, requestSequence: requestSequence, attempt: attempt + 1)
++        return
++      }
++
++      do {
++        try device.lockForConfiguration()
++        defer { device.unlockForConfiguration() }
++        if device.focusMode != .continuousAutoFocus {
++          device.focusMode = .continuousAutoFocus
++        }
++      } catch {
++        // The camera may disappear while the app backgrounds or changes lenses.
++      }
++    }
++    focusRestoreWorkItem = workItem
++    sessionQueue.asyncAfter(deadline: .now() + 0.2, execute: workItem)
++  }
++
++  private func invalidateFocusRequests() {
++    focusRequestSequence += 1
++    focusRestoreWorkItem?.cancel()
++    focusRestoreWorkItem = nil
++  }
++
++  private func focusResult(_ status: String, reason: String? = nil) -> [String: String] {
++    var result = ["status": status]
++    if let reason {
++      result["reason"] = reason
++    }
++    return result
++  }
++
+   func startSessionIfNeeded() {
+     guard !didStartSession else {
+       return
+@@ -226,6 +410,7 @@ public class CameraView: ExpoView, EXAppLifecycleListener, EXCameraInterface, Ca
+       guard let self else {
+         return
+       }
++      invalidateFocusRequests()
+       if session.isRunning && !isSessionPaused {
+         isSessionPaused = true
+         session.stopRunning()
+@@ -327,6 +512,7 @@ public class CameraView: ExpoView, EXAppLifecycleListener, EXCameraInterface, Ca
+   public override func removeFromSuperview() {
+     super.removeFromSuperview()
+     sessionQueue.async { [weak self] in
++      self?.invalidateFocusRequests()
+       self?.sessionManager.stopSession()
+     }
+     motionManager.stopAccelerometerUpdates()
+@@ -348,6 +534,9 @@ public class CameraView: ExpoView, EXAppLifecycleListener, EXCameraInterface, Ca
+ 
+   func pausePreview() {
+     previewLayer.connection?.isEnabled = false
++    sessionQueue.async { [weak self] in
++      self?.invalidateFocusRequests()
++    }
+   }
+ 
+   @objc func orientationChanged() {
+@@ -430,6 +619,7 @@ public class CameraView: ExpoView, EXAppLifecycleListener, EXCameraInterface, Ca
+   }
+ 
+   deinit {
++    focusRestoreWorkItem?.cancel()
+     previewRotationObservation?.invalidate()
+     motionManager.stopAccelerometerUpdates()
+     photoCapture.cleanup()
+diff --git a/node_modules/expo-camera/src/Camera.types.ts b/node_modules/expo-camera/src/Camera.types.ts
+index 7cf0a07..920f64f 100644
+--- a/node_modules/expo-camera/src/Camera.types.ts
++++ b/node_modules/expo-camera/src/Camera.types.ts
+@@ -33,6 +33,25 @@ export type CameraRatio = '4:3' | '16:9' | '1:1';
+  */
+ export type FocusMode = 'on' | 'off';
+ 
++export type CameraFocusStatus = 'started' | 'focused' | 'failed' | 'unsupported';
++
++export type CameraFocusFailureReason =
++  | 'camera_unavailable'
++  | 'preview_not_ready'
++  | 'invalid_point'
++  | 'af_regions_unsupported'
++  | 'camera_changed'
++  | 'superseded'
++  | 'focus_not_acquired'
++  | 'canceled'
++  | 'camera_error'
++  | 'native_method_unavailable';
++
++export type CameraFocusResult = {
++  status: CameraFocusStatus;
++  reason?: CameraFocusFailureReason;
++};
++
+ /**
+  * This option specifies what codec to use when recording a video.
+  * @platform ios
+@@ -505,6 +524,10 @@ export interface CameraViewRef {
+   readonly launchModernScanner: () => Promise<void>;
+   readonly resumePreview: () => Promise<void>;
+   readonly pausePreview: () => Promise<void>;
++  readonly focusAtPoint?: (
++    normalizedX: number,
++    normalizedY: number
++  ) => Promise<CameraFocusResult>;
+ }
+ 
+ /**
+diff --git a/node_modules/expo-camera/src/CameraView.tsx b/node_modules/expo-camera/src/CameraView.tsx
+index b2cc359..7c0c3ba 100644
+--- a/node_modules/expo-camera/src/CameraView.tsx
++++ b/node_modules/expo-camera/src/CameraView.tsx
+@@ -4,6 +4,7 @@ import { Component, createRef } from 'react';
+ import type {
+   CameraCapturedPicture,
+   CameraOrientation,
++  CameraFocusResult,
+   CameraPictureOptions,
+   CameraViewProps,
+   CameraRecordingOptions,
+@@ -153,6 +154,19 @@ export default class CameraView extends Component<CameraViewProps> {
+     return this._cameraRef.current?.pausePreview();
+   }
+ 
++  /**
++   * Focuses and meters at normalized coordinates in the camera preview.
++   * The result distinguishes an accepted request from confirmed focus acquisition.
++   */
++  async focusAtPoint(normalizedX: number, normalizedY: number): Promise<CameraFocusResult> {
++    return (
++      (await this._cameraRef.current?.focusAtPoint?.(normalizedX, normalizedY)) ?? {
++        status: 'unsupported',
++        reason: 'native_method_unavailable',
++      }
++    );
++  }
++
+   // Values under keys from this object will be transformed to native options
+   static ConversionTables = ConversionTables;
+ 

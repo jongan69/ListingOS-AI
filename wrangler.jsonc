@@ -1,0 +1,69 @@
+{
+  "name": "seller-ai-platform",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-07-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "EBAY_MARKETPLACE_ID": "EBAY_US",
+    "EBAY_USE_SANDBOX": "false",
+    "BILLING_ENFORCEMENT_MODE": "enforce",
+    "PUBLIC_API_BASE_URL": "https://seller-ai-platform.jonathang132298.workers.dev",
+    "PUBLIC_WEB_APP_URL": "https://listingos.expo.app"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "seller-ai-db",
+      "database_id": "f49ab6cf-d6ff-4fd3-8137-4e3fc53119e6",
+      "migrations_dir": "worker/migrations"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "SESSION_KV",
+      "id": "8828d3a55aef4548b3fc30d3811e681b"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "UPLOADS_BUCKET",
+      "bucket_name": "seller-ai-uploads"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "PROCESS_UPLOAD_BATCH_QUEUE",
+        "queue": "process-upload-batch"
+      },
+      {
+        "binding": "GENERATE_DRAFT_QUEUE",
+        "queue": "generate-draft"
+      },
+      {
+        "binding": "PUBLISH_LISTING_QUEUE",
+        "queue": "publish-listing"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "process-upload-batch",
+        "max_batch_size": 10,
+        "max_batch_timeout": 3
+      },
+      {
+        "queue": "generate-draft",
+        "max_batch_size": 10,
+        "max_batch_timeout": 3
+      },
+      {
+        "queue": "publish-listing",
+        "max_batch_size": 5,
+        "max_batch_timeout": 3
+      }
+    ]
+  }
+}

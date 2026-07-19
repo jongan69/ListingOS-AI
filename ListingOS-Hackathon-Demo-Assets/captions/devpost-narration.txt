@@ -1,0 +1,9 @@
+Listing inventory should feel closer to posting a story than filling out a form. ListingOS starts with the camera: point at one product, capture as many views as needed, and keep them together as one listing.
+
+The seller can remove a bad shot or move a photo left and right. The first photo becomes the lead image. AI runs only after an intentional capture, so the camera never takes pictures by itself or interrupts the seller with flash and shutter noise.
+
+When the product is finished, ListingOS sends the photos into an asynchronous Cloudflare workflow. The seller can immediately start another item while the Worker stores media, calls GPT-5.6 through the OpenAI Responses API, checks eBay marketplace evidence, and builds the draft.
+
+The result is one review screen with an editable title, price strategy, category, condition, specifics, description, confidence, photo order, and publish blockers. The seller can fix only what matters, verify against eBay, and publish a fixed-price listing through the Inventory API.
+
+Codex accelerated the Expo mobile app, Cloudflare Worker, eBay integration, queue flow, Android stabilization, device QA, and documentation. ListingOS is photos in, verified listing out.

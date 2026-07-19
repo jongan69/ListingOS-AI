@@ -1,0 +1,63 @@
+{
+  "cli": {
+    "version": ">= 16.0.1",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "environment": "development",
+      "env": {
+        "EXPO_USE_PRECOMPILED_MODULES": "0",
+        "LISTINGOS_APS_ENVIRONMENT": "development"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "environment": "preview",
+      "env": {
+        "EXPO_USE_PRECOMPILED_MODULES": "0",
+        "LISTINGOS_APS_ENVIRONMENT": "development"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "channel": "production",
+      "environment": "production",
+      "env": {
+        "EXPO_USE_PRECOMPILED_MODULES": "0",
+        "LISTINGOS_APS_ENVIRONMENT": "production"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6791869174"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account-listingos.json",
+        "track": "internal",
+        "releaseStatus": "completed"
+      }
+    }
+  }
+}

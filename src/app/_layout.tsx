@@ -1,0 +1,50 @@
+import { QueryClientProvider } from "@tanstack/react-query";
+import { Stack } from "expo-router";
+import { useState } from "react";
+import { StatusBar } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+
+import { QueryLifecycle } from "@/components/query-lifecycle";
+import { ToastProvider } from "@/components/toast-provider";
+import { brand } from "@/config/brand";
+import { useNotificationNavigation } from "@/hooks/use-notification-navigation";
+import { createQueryClient } from "@/lib/query-client";
+import { useColorSchemePreference, usePalette } from "@/theme/theme";
+
+export default function RootLayout() {
+  const palette = usePalette();
+  const scheme = useColorSchemePreference();
+  const [queryClient] = useState(createQueryClient);
+  useNotificationNavigation();
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <QueryLifecycle>
+          <SafeAreaProvider>
+            <ToastProvider>
+              <StatusBar
+                backgroundColor={palette.header}
+                barStyle={scheme === "light" ? "dark-content" : "light-content"}
+                translucent={false}
+              />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: {
+                    backgroundColor: palette.background,
+                  },
+                }}
+              >
+                <Stack.Screen name="index" options={{ title: brand.name }} />
+                <Stack.Screen name="batches/[batch-id]" options={{ title: "Draft Queue" }} />
+                <Stack.Screen name="drafts/[draft-id]" options={{ title: "Draft Review" }} />
+              </Stack>
+            </ToastProvider>
+          </SafeAreaProvider>
+        </QueryLifecycle>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
+  );
+}
