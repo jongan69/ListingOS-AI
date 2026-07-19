@@ -117,7 +117,6 @@ worker/
   types.ts             Cloudflare bindings and database row types
 docs/
   README.md            Role-based documentation map
-  archive/             Superseded plans and point-in-time audits
 assets/
   proof-mode/          Runtime fixtures for non-mutating judge flows
 ListingOS-Hackathon-Demo-Assets/
@@ -207,7 +206,6 @@ Local Worker execution is useful for route development. OAuth callbacks, public 
 - [Submission package](docs/DEVPOST_SUBMISSION.md)
 - [Final submission checklist](docs/SUBMISSION_CHECKLIST.md)
 - [ListingOS Market execution plan](docs/LISTINGOS_MARKETPLACE_PLAN.md)
-- [Archived plans and audits](docs/archive/)
 
 ## Security
 

@@ -1,6 +1,6 @@
 # ListingOS Documentation
 
-Use this page as the documentation entry point. Current operating guidance stays in this directory; superseded plans and point-in-time audits live in [`archive/`](archive/).
+Use this page as the documentation entry point for current product, engineering, operations, and submission guidance.
 
 ## Start Here
 
@@ -38,7 +38,3 @@ Use this page as the documentation entry point. Current operating guidance stays
 - [Support](SUPPORT.md) - support guidance for users, reviewers, and judges.
 - [RevenueCat production](REVENUECAT_PRODUCTION.md) - production catalog and webhook configuration.
 - [Monetization](MONETIZATION.md) - entitlement and usage-metering strategy.
-
-## Historical Reference
-
-The [`archive/`](archive/) directory preserves prior plans and audits for provenance. It is not the source of truth for current implementation or submission status.
