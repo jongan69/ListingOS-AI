@@ -11,7 +11,7 @@ Use this file as the final polish gate before pushing ListingOS through Devpost,
 - Public links are consistent across README, store copy, Devpost copy, and app metadata:
   - Web: `https://listingos.expo.app`
   - Devpost: `https://devpost.com/software/listingos`
-  - GitHub: `https://github.com/jongan69/ListingOS`
+  - GitHub: `https://github.com/jongan69/ListingOS-AI`
   - Support: `https://seller-ai-platform.jonathang132298.workers.dev/app-support`
   - Privacy: `https://seller-ai-platform.jonathang132298.workers.dev/privacy`
 
@@ -46,7 +46,7 @@ Use this file as the final polish gate before pushing ListingOS through Devpost,
 - Elevator pitch: current value from [`docs/DEVPOST_SUBMISSION.md`](DEVPOST_SUBMISSION.md)
 - Built-with tags reflect the real stack only.
 - Project URL points to `https://listingos.expo.app`
-- Repo URL points to `https://github.com/jongan69/ListingOS`
+- Repo URL points to `https://github.com/jongan69/ListingOS-AI`
 - Repo remains public through judging, or if it becomes private it is shared with `testing@devpost.com` and `build-week-event@openai.com`.
 - Judge instructions clearly warn that publish is a real marketplace mutation.
 - Contribution statement is present and accurate.

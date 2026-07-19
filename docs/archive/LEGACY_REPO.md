@@ -6,7 +6,7 @@ During Build Week, the product direction changed from a web dashboard to a camer
 
 ## Preservation State
 
-- GitHub repo: `https://github.com/jongan69/ListingOS`
+- GitHub repo: `https://github.com/jongan69/ListingOS-AI`
 - Preserved branch: `legacy/nextjs-prototype`
 - Preserved tag: `nextjs-prototype-final`
 - Active submission branch: `main`
