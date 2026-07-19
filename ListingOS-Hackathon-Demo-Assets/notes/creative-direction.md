@@ -1,5 +1,13 @@
 # ListingOS Demo Creative Direction
 
+Scope: the **Track B overlay layer** — device mockups, text cards, typography, colour, and
+music. Track A (live footage and on-camera beats) is governed by
+[`../PRODUCTION_PLAN.md`](../PRODUCTION_PLAN.md).
+
+Note: sections below referencing "the 30s and 60s versions" predate the current single
+~2:53 cut. Read those as "the opener" and "the hero beat" respectively; the template and
+music picks themselves are still current.
+
 ## Visual Goal
 
 Make ListingOS feel like a premium mobile product launch:

@@ -1,3 +1,6 @@
+> **SUPERSEDED — the 30s/60s/90s multi-cut plan was abandoned; one ~2:53 cut is being made**
+> Not a current plan. See [`PRODUCTION_PLAN.md`](../../PRODUCTION_PLAN.md) and [`../README.md`](../README.md).
+
 # ListingOS Edit Plan
 
 ## Deliverables

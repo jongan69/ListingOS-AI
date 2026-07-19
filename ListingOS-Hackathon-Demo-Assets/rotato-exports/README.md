@@ -1,35 +1,62 @@
 # Rotato Exports
 
-## Rendered opener
+Local output directory for device-mockup renders. **Empty in a fresh checkout** — all
+`.mp4` files here are gitignored. The render source is checked in, so everything below
+is reproducible.
 
-`listingos-rotato-3phone-demo.mp4` is a real Rotato render from the packaged `../rotato-project-inputs/Fast 3 Phones (Autosaved).rotato` project. The same horizontal ListingOS master was injected into all three device screens through Rotato's bundled renderer.
+Rotato material is Track B (overlay). Under the two-track model it may open or punctuate
+the video but must never stand in for device evidence. See `PRODUCTION_PLAN.md` §1.
 
-`listingos-rotato-3phone-demo-repro.mp4` is the reproducibility render produced during the final demo sprint from the checked-in project source and the verified horizontal base master.
+## Status: superseded, reproducible
 
-The source library for this pass was `/Users/jonathangan/Desktop/Rotato-Animation-Templates`. The final opener uses `Esssential Mix v2.3/Phone - Fast 3 Phones/Fast 3 Phones.rotato`; the approved variant board uses the viable `.rotato` projects from `Mega-Multi 1.0` and `Esssential Mix v2.3/Phone - Simple All-Screen Tour`.
+The renders described below were produced during the earlier fully-automated pass, while
+the product was incomplete and the footage required for a functional demo did not exist.
+**They were not accepted into a deliverable and should not be reused as-is.** The
+templates, settings, and QA gate are recorded here because they remain the right starting
+point for a re-render against current footage.
 
-- Output: H.264, 1920x1080, 30 fps
-- Duration: 7.23 seconds
-- Source template: `../rotato-project-inputs/Fast 3 Phones (Autosaved).rotato`
-- Final composite: `../final-renders/listingos-horizontal-demo-rotato-enhanced-20260718.mp4`
+## Reproducing the opener
 
-The final composite starts with this device-mockup opener and then continues into the real Android listing flow. The original base master remains unchanged for technical fallback and auditability.
+Source project: [`../rotato-project-inputs/Fast 3 Phones (Autosaved).rotato`](../rotato-project-inputs/) — checked in.
 
-## Variant Board
+The pass injected a horizontal ListingOS master into all three device screens via
+Rotato's bundled renderer. Output settings were H.264, 1920x1080, 30 fps, ~7.2 seconds.
 
-All accepted variants below were rendered at 1920x1080 with the source media matched to the scene's screen orientation. They are intentionally separate from the final demo so future edits can choose the right energy for the beat.
+The template library used was a local desktop collection, not part of this repo. The
+opener came from `Esssential Mix v2.3/Phone - Fast 3 Phones/Fast 3 Phones.rotato`; the
+variant board drew on `Mega-Multi 1.0` and
+`Esssential Mix v2.3/Phone - Simple All-Screen Tour`. Only the packaged project above is
+checked in — the wider library must be present locally to re-render other templates.
 
-| Export | Scene role | Source treatment | Status |
-| --- | --- | --- | --- |
-| `variants/listingos-2-phone-side-by-side-portrait-v1.mp4` | Two-device hero or comparison | Portrait Android camera footage applied to both phone screens | Approved |
-| `variants/listingos-3-phone-side-by-side-portrait-v1.mp4` | Fast montage transition | Portrait Android capture applied to all three phones | Approved |
-| `variants/listingos-4-phone-side-by-side-portrait-v1.mp4` | Feature montage / scale proof | Portrait Android capture applied to all four phones | Approved |
-| `variants/listingos-simple-tour-portrait-v1.mp4` | Single-device product intro | Portrait Android camera footage fills the phone screen | Approved |
+`DEMO_VIDEO_SCRIPT_V2.md` calls for this opener at 0:10–0:16, slowed 20%.
 
-`variants/listingos-rotato-variant-reel-v1.mp4` is a short review reel assembled from the approved variants. Use the individual clips for final editing so the timing can follow the narration and the product story.
+## Variants explored
 
-## Rejected Assets
+A board of alternates was rendered at 1920x1080 with source media matched to each scene's
+screen orientation. **None of these files are in the repo.** The list is retained so the
+same set can be re-derived rather than rediscovered:
 
-`rejected/listingos-spiral-phones-portrait-v1-placeholder-rejected.mp4`, `rejected/listingos-middle-down-portrait-v1-placeholder-rejected.mp4`, and `rejected/listingos-phones-stacked-portrait-v1-placeholder-rejected.mp4` are retained for audit only. The scenes kept unrelated template content or Rotato's own upload placeholder, so they must not be used in a ListingOS deliverable. This is the visual QA gate for every future Rotato render: no template placeholder, unrelated app, or unverified screen may survive into an edit.
+| Variant | Intended scene role | Source treatment |
+| --- | --- | --- |
+| 2-phone side-by-side, portrait | Two-device hero or comparison | Portrait Android camera footage on both screens |
+| 3-phone side-by-side, portrait | Fast montage transition | Portrait Android capture on all three |
+| 4-phone side-by-side, portrait | Feature montage / scale proof | Portrait Android capture on all four |
+| Simple tour, portrait | Single-device product intro | Portrait Android footage fills the screen |
 
-Several desktop files are `.rotatotemplate` files rather than editable `.rotato` projects. The local Rotato CLI cannot render those directly; they require opening and saving them in the Rotato app first. The current board therefore uses the viable `.rotato` projects and records this limitation instead of pretending the template files rendered successfully.
+These passed technical review at the time but were rendered against the incomplete
+product. Treat the list as a menu of template choices, not as approved assets.
+
+## QA gate for any future Rotato render
+
+Three renders were rejected during the pass because scenes retained unrelated template
+content or Rotato's own upload placeholder. That failure mode defines the gate:
+
+> No template placeholder, unrelated app UI, or unverified screen may survive into a
+> ListingOS deliverable. Inspect every phone screen in every frame before accepting a render.
+
+## Known limitation
+
+Several files in the desktop library are `.rotatotemplate` rather than editable `.rotato`
+projects. The Rotato CLI cannot render those directly — they must be opened and saved in
+the Rotato app first. Any plan that names a `.rotatotemplate` requires that conversion
+step before it can be automated.

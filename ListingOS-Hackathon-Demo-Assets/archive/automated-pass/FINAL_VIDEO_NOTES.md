@@ -1,3 +1,6 @@
+> **SUPERSEDED — records renders made against an incomplete product; measurements describe files that no longer exist**
+> Not a current plan. See [`PRODUCTION_PLAN.md`](../../PRODUCTION_PLAN.md) and [`../README.md`](../README.md).
+
 # Final Video Notes
 
 ## Master

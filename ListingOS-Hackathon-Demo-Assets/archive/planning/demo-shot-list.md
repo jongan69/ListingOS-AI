@@ -1,3 +1,6 @@
+> **SUPERSEDED — superseded by PRODUCTION_PLAN.md sections 3 and 6**
+> Not a current plan. See [`PRODUCTION_PLAN.md`](../../PRODUCTION_PLAN.md) and [`../README.md`](../README.md).
+
 # ListingOS Demo Shot List
 
 ## Objective

@@ -6,9 +6,13 @@ Backend: `seller-ai-platform.jonathang132298.workers.dev`
 
 ## Scope and test rules
 
-This sprint tested the camera/photo-to-draft path against 10 distinct product sets. Each selected set used four product photos, asynchronous upload, draft generation, queue state, review data, pricing/comps, and the `ready` or `needs_input` safety gate. The matrix used drafts and did not publish every test item to the live eBay account. The previously verified live publish remains documented in the demo README.
+This sprint tested the camera/photo-to-draft path against 10 distinct product sets. Each selected set used four product photos, asynchronous upload, draft generation, queue state, review data, pricing/comps, and the `ready` or `needs_input` safety gate.
+
+**This matrix tested drafting, not publishing.** No item in the table below was published to the live eBay account. For the state of publish evidence, see "Publish evidence" below — it is an open blocker, not a settled result.
 
 The test assets are in `product-image-sets/`. The source photos are desktop product photos resized only for repeatable test intake. The app itself must use the original-resolution source photos for a production listing.
+
+**Fixture folder numbers do not correspond to matrix row numbers.** The `#` column below is a record index. Row 4 (`Only Mostly Devastated` paperback) has no fixture folder, and fixtures `11-car-charger` and `12-lighter` were never run through the matrix. Do not assume `product-image-sets/0N-*` maps to row N.
 
 ## Matrix results
 
@@ -68,14 +72,26 @@ The QA fixture files generated a small-image warning on some photos. This is exp
 - Low-confidence and missing-comps safety gates: passed.
 - Card identity extraction and exact-comps refusal: passed for Wartortle and Pikachu.
 - Queue action sheet stability after native UI patch: passed.
-- Live eBay publish proof: passed in the verified run documented in `README.md`.
+- Live eBay publish proof: **not captured in this sprint.** See "Publish evidence" below.
 - Full matrix live publishing: intentionally not performed to avoid creating test listings in the seller account.
 - Sony camera capture: not part of this Android-first hackathon sprint; the provider contracts remain documented separately.
 
+## Publish evidence
+
+This section replaces an earlier claim that a live publish "passed in the verified run." That claim was not supported by the recordings and is corrected here.
+
+**What is true:** the product publishes real fixed-price listings. Inventory item, offer, and publish calls are implemented, the production Worker runs with `EBAY_USE_SANDBOX=false`, and published D1 attempts contain real listing and offer IDs. `../docs/CLAIMS.md` rates this High confidence and approves it for public use.
+
+**What is missing:** footage of a successful publish. The continuous demo recording ends in an eBay `BrandMPN` validation failure — recorded honestly in [`notes/devpost-android-cut-qa.md`](notes/devpost-android-cut-qa.md) rather than edited around.
+
+The distinction matters because `DEMO_VIDEO_SCRIPT_V2.md` opens on **REAL LISTING · REAL ACCOUNT** and narrates a successful publish at 2:00–2:10. The capability claim is defensible; the footage to support it does not yet exist. Resolution paths are in [`PRODUCTION_PLAN.md`](PRODUCTION_PLAN.md) §4.
+
 ## Evidence index
 
-- Raw attempt captures: `raw-screen-recordings/qa-attempts/` (local-only)
-- Review and queue screenshots: `screenshots/qa-attempts/` (local-only)
-- Reusable product fixtures: `product-image-sets/`
-- Verified live flow: `raw-screen-recordings/listingos-complete-fast2-a16-20260718.mp4`
-- Presentation source: `final-renders/listingos-end-to-end-a16-demo-cut-20260718.mp4`
+All video and screenshot paths below are gitignored local artifacts. Empty in a fresh checkout.
+
+- Reusable product fixtures: `product-image-sets/` — **tracked, present**
+- Continuous demo recording: `raw-screen-recordings/listingos-full-demo-a16.mp4` — local-only. Approximately 135s, H.264, 1080x2340. This is the single source recording referenced by `DEMO_VIDEO_SCRIPT_V2.md`; earlier docs referred to it under other filenames.
+- Camera-flow QA clip: `raw-screen-recordings/listingos-camera-flow-a16.mp4` — local-only
+- Raw attempt captures: `raw-screen-recordings/qa-attempts/` — local-only
+- Review and queue screenshots: `screenshots/qa-attempts/` — local-only, gitignored at the parent; the directory does not exist in this checkout

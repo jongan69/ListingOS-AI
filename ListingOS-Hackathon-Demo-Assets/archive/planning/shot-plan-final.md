@@ -1,3 +1,6 @@
+> **SUPERSEDED — superseded by the beat map in PRODUCTION_PLAN.md section 3**
+> Not a current plan. See [`PRODUCTION_PLAN.md`](../../PRODUCTION_PLAN.md) and [`../README.md`](../README.md).
+
 # Final Shot Plan (Devpost cut, < 3:00)
 
 Source of truth: docs/DEMO_SCRIPT.md + docs/DEMO_RECORDING.md. This file maps each
