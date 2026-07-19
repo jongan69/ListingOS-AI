@@ -2,6 +2,11 @@
 
 ListingOS is an Expo SDK 57 app with a Cloudflare Worker backend. Read the versioned Expo documentation at https://docs.expo.dev/versions/v57.0.0/ before changing framework behavior.
 
+## Commit Rules
+
+- Never mention Claude, Anthropic, or any AI assistant in commit messages, PR descriptions, or code comments.
+- Never add `Co-Authored-By: Claude` or `🤖 Generated with Claude Code` trailers. Commits are authored by Jonathan Gan only.
+
 ## Required Practices
 
 - Treat `src/shared/contracts.ts` as the mobile/Worker API contract source of truth.
