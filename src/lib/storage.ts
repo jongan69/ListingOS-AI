@@ -5,7 +5,7 @@ import { Platform } from "react-native";
 const SESSION_TOKEN_KEY = "seller-ai.session-token";
 const LAST_BATCH_ID_KEY = "seller-ai:last-batch-id";
 const HIDDEN_QUEUE_BATCH_IDS_KEY = "seller-ai:hidden-queue-batch-ids";
-const THEME_PREFERENCE_KEY = "seller-ai:theme-preference";
+export const THEME_PREFERENCE_KEY = "seller-ai:theme-preference";
 
 export async function getSessionToken() {
   if (Platform.OS === "web") {
