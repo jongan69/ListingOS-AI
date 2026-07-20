@@ -7,7 +7,9 @@
 - Capture app logs, screenshots/videos, and Worker webhook proof for judge-safe evidence.
 
 ## Branch and artifact context
-- Branch: `codex/android-billing-production-readiness`
+
+- Branch: `main`
+- This runbook reflects merged mainline state after cleaning temporary branch state.
 - App package: `com.jongan69.listingos`
 - RevenueCat keys in play:
   - Production: `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` (`goog_...`) + `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` (`appl_...`)

@@ -2,6 +2,19 @@
 
 Audit date: 2026-07-19
 
+## Addendum (2026-07-20)
+
+- The deployed host checks are currently inconsistent with this audit snapshot for store-facing web routes.
+- Production checks in this workspace currently return `404` for:
+  - `/app-support`
+  - `/privacy`
+  - `/terms`
+  - `/support`
+  - `/legal/terms`
+- Worker-hosted support and privacy routes remain available:
+  - `https://seller-ai-platform.jonathang132298.workers.dev/app-support`
+  - `https://seller-ai-platform.jonathang132298.workers.dev/privacy`
+
 Deployed source baseline: `9c6c7d3` on `main`
 
 Production URL: `https://listingos.expo.app`

@@ -66,7 +66,7 @@ Turn product photos into eBay listings with AI-generated copy, pricing guidance,
 
 ## Keywords
 
-ebay,seller,reseller,listing,inventory,ai,photos,marketplace,auction,commerce,scanner,cards
+ebay,seller,reseller,listing,inventory,ai,photos,marketplace,commerce,scanner,cards
 
 ## Screenshot Captions
 

@@ -4,6 +4,11 @@
 
 Clear all required metadata and listing fields using repository-backed values so the app can move from `Unable to Add for Review` to a valid submission state.
 
+## Current status snapshot (2026-07-20)
+
+- Blockers remain as listed if App Store Connect metadata is still missing in the live form.
+- Support URL and privacy URL should use the Worker paths (`/app-support`, `/privacy`) while `listingos.expo.app` store-facing routes continue to return `404` in this deployed-check snapshot.
+
 ## Current App Store Connect blockers
 
 ### App Information blockers
@@ -57,7 +62,7 @@ Clear all required metadata and listing fields using repository-backed values so
 
 ### English (U.S.) keywords
 
-1. `ebay,seller,reseller,listing,inventory,ai,photos,marketplace,auction,commerce,scanner,cards`
+1. `ebay,seller,reseller,listing,inventory,ai,photos,marketplace,commerce,scanner,cards`
 
 ### English (U.S.) support URL
 

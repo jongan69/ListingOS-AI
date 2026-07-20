@@ -2,6 +2,18 @@
 
 ListingOS can be demoed as a standalone Android app without Expo Go, Metro, or a USB cable after installation.
 
+## Current production snapshot (as of 2026-07-20)
+
+- App and Worker are still production-operational for core flows.
+- Current web deployment smoke status for store-facing routes:
+  - `https://seller-ai-platform.jonathang132298.workers.dev/app-support`: `200`
+  - `https://seller-ai-platform.jonathang132298.workers.dev/privacy`: `200`
+  - `https://listingos.expo.app/app-support`: `404`
+  - `https://listingos.expo.app/privacy`: `404`
+  - `https://listingos.expo.app/terms`: `404`
+- RevenueCat production Android build artifact `a5e3300a-57b5-42d1-8621-d4dd2698a2de` is in progress from the last run.
+- iOS production submission remains unfinalized pending store credential/session work.
+
 ## Current Demo Build
 
 - App name: `ListingOS`
@@ -119,7 +131,7 @@ Search `startup_trace.log` for the `[RevenueCat] mode=` line and verify that it 
 1. Keep local `.env` at `EXPO_PUBLIC_REVENUECAT_MODE=test` for dev-device checks.
 2. Add explicit `EXPO_PUBLIC_REVENUECAT_MODE=production` and platform keys in `eas.json -> build.production.env`.
 3. Keep `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` in local/dev profiles only.
-4. If a single public production key is still in use, set `EXPO_PUBLIC_REVENUECAT_PROD_API_KEY` as a temporary fallback and add an issue to remove it once `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` and `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` are both verified.
+4. Keep `EXPO_PUBLIC_REVENUECAT_PROD_API_KEY` as a temporary fallback only while `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` and `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` are being validated.
 5. Add release validation using `eas env:list`, startup trace, and one reproducibility rerun.
 
 ### Rollback steps
@@ -248,8 +260,9 @@ npm run eas:submit:production
 - RevenueCat test entitlements: `starter`, `pro`, `studio`
 - Billing enforcement: `enforce`
 - Free usage allowance: `20` AI listing credits per month
-- iOS build `1.0.1 (16)`: submitted to App Store Connect/TestFlight on 2026-07-18; Apple processing is pending
-- Android build `1.0.1 (10)`: submitted to the Google Play internal track with `releaseStatus: draft` on 2026-07-18
+- iOS build metadata is currently `1.0.1 (20)` in `app.json`; finalize status remains external to the repo.
+- Android build metadata is currently `1.0.1` / versionCode `14` in `app.json`; historical internal-track `versionCode 10` remains in the record.
+- Android production build `a5e3300a-57b5-42d1-8621-d4dd2698a2de` is active in EAS as of 2026-07-20.
 - iOS submission: `https://expo.dev/accounts/jongan69/projects/listingos/submissions/c826411e-2462-47e5-8fa7-47fa5c4f0f85`
 - Android submission: `https://expo.dev/accounts/jongan69/projects/listingos/submissions/4e2c3cf1-65f5-4290-ab4e-d8af3e5b44b5`
 - Android installed release APK: `android/app/build/outputs/apk/release/app-release.apk`
@@ -260,7 +273,7 @@ npm run eas:submit:production
 
 Note: App Store Connect previously reported the display name `ListingOS` as already taken during app-record creation and temporarily created the record as `ListingOS (44f5ee)`. Confirm the final display name in App Store Connect before public release.
 
-The Google Play Android Developer API is enabled. The current repository and submitted internal-track build use versionCode `10`.
+The Google Play Android Developer API is enabled. The historical internal-track submission used versionCode `10`; newer production-cycle builds are currently running separately.
 
 The Play submit service account is active in Play Console with app-scoped access to `ListingOS`, including app read access and `Release apps to testing tracks`. API access was verified by creating and deleting a temporary Android Publisher edit for `com.jongan69.listingos`, so `npm run eas:submit:android` can be used for future internal-track draft submissions.
 
@@ -283,7 +296,7 @@ Before pushing App Store metadata, replace any account-specific review contact d
 
 - Privacy: `https://seller-ai-platform.jonathang132298.workers.dev/privacy`
 - Support: `https://seller-ai-platform.jonathang132298.workers.dev/app-support`
-- Marketing: `https://devpost.com/software/listingos`
+- Marketing: `https://listingos.expo.app`
 
 ## Demo Safety
 

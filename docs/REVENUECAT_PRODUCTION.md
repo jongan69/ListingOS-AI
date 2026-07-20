@@ -4,16 +4,24 @@ ListingOS uses RevenueCat production public SDK keys in release builds. The
 mobile app must never receive the RevenueCat secret API key; the Worker keeps
 that secret for server-side subscriber verification.
 
+## Current production snapshot (2026-07-20)
+
+- RevenueCat environment selection is now production-first by mode:
+  - `EXPO_PUBLIC_REVENUECAT_MODE=production` routes to platform public keys.
+  - `EXPO_PUBLIC_REVENUECAT_PROD_API_KEY` is retained only as a transition fallback.
+- Worker webhook hardening is in place with auth/signature checks and replay protection.
+- Store proof is still blocked until active App Store Connect and Google Play production subscription products are wired to real store SKUs and transactions are observed end-to-end.
+
 ## EAS production variables
 
 Set these in the EAS `production` environment before building:
 
 ```text
 EXPO_PUBLIC_REVENUECAT_MODE=production
-EXPO_PUBLIC_REVENUECAT_PROD_API_KEY=
 EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=appl_...
 EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=goog_...
 EXPO_PUBLIC_REVENUECAT_OFFERING_ID=default
+EXPO_PUBLIC_REVENUECAT_PROD_API_KEY=      # optional transition fallback only
 ```
 
 Apply Worker secrets in Cloudflare (never as `EXPO_PUBLIC_*`):
@@ -178,3 +186,4 @@ release pass.
 - AAB: https://expo.dev/artifacts/eas/4QPvC65yttuPyEBxMhr3uvLbQ8msbzItFTsutBUuzb4.aab
 - Google Play internal-track submission: `a651b790-ae89-47af-a7e5-a32d7240cdd6`
 - Google Play result: accepted as a draft internal release
+- A follow-up Android production build `a5e3300a-57b5-42d1-8621-d4dd2698a2de` is also in progress from the latest release cycle.

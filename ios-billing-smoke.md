@@ -1,7 +1,7 @@
 # iOS Billing Smoke Runbook (Production Mode)
 
 Date: 2026-07-20
-Branch: `codex/android-billing-production-readiness`
+Branch: `main` (historical runbook snapshot)
 Build/profile target: EAS `production` iOS, `EXPO_PUBLIC_REVENUECAT_MODE=production`
 
 ## Scope

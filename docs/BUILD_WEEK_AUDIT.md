@@ -1,8 +1,14 @@
 # OpenAI Build Week Audit
 
-Audit date: 2026-07-18
+Audit date: 2026-07-18 (historical snapshot)
 Submission deadline: Tuesday, July 21, 2026 at 5:00 PM PT
 Audit target: public GitHub repo plus the current working tree
+
+Current status snapshot (2026-07-20):
+
+- Repo and submission docs are consistent, with the remaining critical dependency on the final demo video and YouTube upload.
+- Store-facing route validation on `listingos.expo.app` is still pending; `/app-support`, `/privacy`, and `/terms` remain non-200 and should not be treated as final proof.
+- Worker-hosted `/app-support` and `/privacy` routes remain valid submission anchors today.
 
 Official sources:
 
@@ -34,6 +40,7 @@ This audit is Build Week-first. App Store and Play readiness are useful supporti
 - Support endpoint checked on 2026-07-18: HTTP 200
 - Web app checked on 2026-07-18: HTTP 200
 - `/feedback` session ID documented in [DEVPOST_SUBMISSION.md](DEVPOST_SUBMISSION.md): `019f6944-d662-7d11-8a6d-5ecc9906c817`
+- 2026-07-20 production web check: `listingos.expo.app` store-facing routes `/app-support`, `/privacy`, and `/terms` still return `404` in deployed checks.
 - Local final render durations checked on 2026-07-18:
   - `listingos-horizontal-demo-20260718.mp4`: `125.32s`
   - `listingos-horizontal-demo-rotato-enhanced-20260718.mp4`: `132.57s`

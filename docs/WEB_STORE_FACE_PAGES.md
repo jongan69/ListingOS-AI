@@ -1,5 +1,13 @@
 # Web Store-Facing Route Evidence
 
+## Current status snapshot (2026-07-20)
+
+- Public web routes in this repo are implemented at the `src/app` level, and local dev checks continue to pass.
+- Production `listingos.expo.app` checks for `/app-support`, `/privacy`, `/terms`, `/support`, and `/legal/terms` still return `HTTP/2 404` in this workspace snapshot, while local route checks return `200`.
+- Canonical support/privacy links for App Store and support workflows remain the Worker routes:
+  - `https://seller-ai-platform.jonathang132298.workers.dev/app-support`
+  - `https://seller-ai-platform.jonathang132298.workers.dev/privacy`
+
 ## Scope
 
 - Added public web routes in `src/app` only:
@@ -79,7 +87,7 @@ Observed in this workspace:
 - `npm run check` currently fails on pre-existing repo warnings in `worker/index.ts`:
   - `@typescript-eslint/array-type`
   - `@typescript-eslint/no-unused-vars` (`escapeLikePattern`)
-- public URL probes for `listingos.expo.app` currently returned `HTTP/2 404` for all tested routes until a deploy of this branch is published.
+- Public URL probes for `listingos.expo.app` currently returned `HTTP/2 404` for all tested routes in this workspace snapshot, so store-submission support/terms references should stay on Worker URLs until deployment is fixed.
 
 ## Route list summary
 

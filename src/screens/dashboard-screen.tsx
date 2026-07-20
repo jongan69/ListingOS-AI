@@ -135,6 +135,9 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
     }
 
     void Linking.getInitialURL().then(handleAuthReturn);
+    if (typeof window !== "undefined") {
+      handleAuthReturn(window.location.href);
+    }
     const subscription = Linking.addEventListener("url", (event) => {
       handleAuthReturn(event.url);
     });
@@ -1498,8 +1501,15 @@ function connectedSessionReady(value: unknown) {
 
 function getAuthSessionIdFromUrl(url: string) {
   const parsed = Linking.parse(url);
-  const value = parsed.queryParams?.authSessionId;
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+  const fromParsed = parsed.queryParams?.authSessionId;
+  if (typeof fromParsed === "string" && fromParsed.trim()) return fromParsed.trim();
+  try {
+    const parsedUrl = new URL(url);
+    const fromSearch = parsedUrl.searchParams.get("authSessionId");
+    return typeof fromSearch === "string" && fromSearch.trim() ? fromSearch.trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 function relativeQueueTime(value: string) {

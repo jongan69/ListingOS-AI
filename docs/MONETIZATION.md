@@ -206,7 +206,10 @@ Implemented:
 
 - `react-native-purchases` installed for native RevenueCat SDK support.
 - Home screen shows current plan, monthly AI listing credits, usage, and upgrade/manage entry point.
-- Native builds initialize RevenueCat using `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`, `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`, or the Test Store fallback `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`.
+- Native builds initialize RevenueCat by `EXPO_PUBLIC_REVENUECAT_MODE`:
+  - `production` → `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` / `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`
+  - `test` → `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`
+  - optional migration fallback: `EXPO_PUBLIC_REVENUECAT_PROD_API_KEY` when a platform key is temporarily missing
 - RevenueCat identity is linked to the seller account as `seller:{sellerAccountId}` after eBay login.
 - The app syncs RevenueCat active entitlements to the Worker.
 - The Worker stores `billing_profiles`, `usage_periods`, and `usage_events`.
@@ -217,13 +220,14 @@ Implemented:
 - `BILLING_ENFORCEMENT_MODE=enforce` blocks over-quota draft creation and disables free autopublish in production.
 - Client-side RevenueCat sync is not trusted for paid access in enforce mode; paid entitlements must come from RevenueCat REST verification, a signed RevenueCat webhook, or a manual server-side grant.
 
-RevenueCat project state as of July 17, 2026:
+RevenueCat project state as of July 20, 2026:
 
 - Project: `ListingOS`
-- Current store configuration: Test Store
-- Test Store public SDK key is configured locally through `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`
+- Current store configuration: production-first (`EXPO_PUBLIC_REVENUECAT_MODE=production`) with Test Store retained for local and preview test checks.
+- Test Store key is still configured locally through `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` for non-production test-mode debugging.
+- Platform production keys are expected from `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` and `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`; the shared `EXPO_PUBLIC_REVENUECAT_PROD_API_KEY` remains fallback-only.
 - Entitlements created: `starter`, `pro`, `studio`
-- Test Store products created:
+- Test Store products currently configured:
   - `listingos_starter_monthly` at `$14.99/mo`
   - `listingos_starter_annual` at `$149.99/yr`
   - `listingos_pro_monthly` at `$49.99/mo`

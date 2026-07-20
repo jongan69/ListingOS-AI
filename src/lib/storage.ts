@@ -55,12 +55,26 @@ export async function setHiddenQueueBatchIds(values: string[]) {
 }
 
 export async function getThemePreference() {
+  if (Platform.OS === "web") {
+    const raw = getWebStorage()?.getItem(THEME_PREFERENCE_KEY) ?? null;
+    return normalizeThemePreference(raw);
+  }
+
   const raw = await AsyncStorage.getItem(THEME_PREFERENCE_KEY);
-  return raw === "light" || raw === "dark" ? raw : null;
+  return normalizeThemePreference(raw);
 }
 
 export async function setThemePreference(value: "light" | "dark") {
+  if (Platform.OS === "web") {
+    getWebStorage()?.setItem(THEME_PREFERENCE_KEY, value);
+    return;
+  }
+
   await AsyncStorage.setItem(THEME_PREFERENCE_KEY, value);
+}
+
+function normalizeThemePreference(raw: string | null) {
+  return raw === "light" || raw === "dark" ? raw : null;
 }
 
 function getWebStorage() {

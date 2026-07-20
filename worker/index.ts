@@ -629,17 +629,21 @@ app.get("/api/session/ebay/callback", async (c) => {
   const authSessionId = await c.env.SESSION_KV.get(`oauth-state:${state}`);
   const isMobileWebview = isProbablyMobileCallback(c.req.header("user-agent"));
   if (!authSessionId) {
+    const fallbackUrl = buildWebCallbackRedirectUrl(c.env.PUBLIC_WEB_APP_URL, null);
     return c.html(
       renderCallbackHtml(
         "Expired auth session.",
         "Start the seller sign-in flow again from ListingOS.",
         undefined,
         isMobileWebview,
+        fallbackUrl,
       ),
       400,
     );
   }
   if (error) {
+    const callbackState = { authSessionId, status: "failed" as const };
+    const fallbackUrl = buildWebCallbackRedirectUrl(c.env.PUBLIC_WEB_APP_URL, callbackState);
     await c.env.DB.prepare(
       "UPDATE auth_sessions SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?",
     ).bind(error, new Date().toISOString(), authSessionId).run();
@@ -647,19 +651,23 @@ app.get("/api/session/ebay/callback", async (c) => {
       renderCallbackHtml(
         "eBay sign-in cancelled.",
         error,
-        { authSessionId, status: "failed" },
+        callbackState,
         isMobileWebview,
+        fallbackUrl,
       ),
       400,
     );
   }
   if (!code) {
+    const callbackState = { authSessionId, status: "failed" as const };
+    const fallbackUrl = buildWebCallbackRedirectUrl(c.env.PUBLIC_WEB_APP_URL, callbackState);
     return c.html(
       renderCallbackHtml(
         "Missing eBay code.",
         "The callback reached ListingOS without an authorization code.",
-        { authSessionId, status: "failed" },
+        callbackState,
         isMobileWebview,
+        fallbackUrl,
       ),
       400,
     );
@@ -690,17 +698,22 @@ app.get("/api/session/ebay/callback", async (c) => {
         "UPDATE auth_sessions SET status = 'complete', user_id = ?, seller_account_id = ?, session_token = ?, updated_at = ? WHERE id = ?",
       ).bind(userId, sellerAccountId, sessionToken, now, authSessionId),
     ]);
+    const callbackState = { authSessionId, status: "complete" as const };
+    const fallbackUrl = buildWebCallbackRedirectUrl(c.env.PUBLIC_WEB_APP_URL, callbackState);
 
     return c.html(
       renderCallbackHtml(
         "Seller account connected.",
         "Opening ListingOS now. If it does not open automatically, use the button below.",
-        { authSessionId, status: "complete" },
+        callbackState,
         isMobileWebview,
+        fallbackUrl,
       ),
     );
   } catch (callbackError) {
     const message = callbackError instanceof Error ? callbackError.message : String(callbackError);
+    const callbackState = { authSessionId, status: "failed" as const };
+    const fallbackUrl = buildWebCallbackRedirectUrl(c.env.PUBLIC_WEB_APP_URL, callbackState);
     await c.env.DB.prepare(
       "UPDATE auth_sessions SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?",
     ).bind(message, new Date().toISOString(), authSessionId).run();
@@ -708,8 +721,9 @@ app.get("/api/session/ebay/callback", async (c) => {
       renderCallbackHtml(
         "eBay sign-in failed.",
         message,
-        { authSessionId, status: "failed" },
+        callbackState,
         isMobileWebview,
+        fallbackUrl,
       ),
       500,
     );
@@ -6303,18 +6317,40 @@ function isProbablyMobileCallback(userAgent: string | undefined) {
   return normalized.includes("iphone") || normalized.includes("ipad") || normalized.includes("android") || normalized.includes("mobile");
 }
 
+function buildWebCallbackRedirectUrl(
+  webAppUrl: string | undefined,
+  callbackState?: { authSessionId: string; status: "complete" | "failed" } | null,
+) {
+  const baseUrl = firstNonEmptyString([webAppUrl, "https://listingos.expo.app"]);
+  if (!baseUrl) return null;
+  try {
+    const url = new URL(baseUrl);
+    if (callbackState) {
+      url.searchParams.set("authSessionId", callbackState.authSessionId);
+      url.searchParams.set("authStatus", callbackState.status);
+    }
+    return url.toString();
+  } catch {
+    if (!callbackState) return baseUrl;
+    const separator = baseUrl.includes("?") ? "&" : "?";
+    return `${baseUrl}${separator}authSessionId=${encodeURIComponent(callbackState.authSessionId)}&authStatus=${encodeURIComponent(callbackState.status)}`;
+  }
+}
+
 function renderCallbackHtml(
   title: string,
   body: string,
   deepLink?: { authSessionId: string; status: "complete" | "failed" },
   isMobile = false,
+  webUrl?: string | null,
 ) {
   const appUrl = deepLink
     ? `listingos://?authSessionId=${encodeURIComponent(deepLink.authSessionId)}&authStatus=${encodeURIComponent(deepLink.status)}`
     : null;
-  const webUrl = "https://listingos.expo.app/";
-  const resolvedUrl = isMobile ? appUrl : webUrl;
+  const resolvedWebUrl = webUrl ?? "https://listingos.expo.app/";
+  const resolvedUrl = isMobile ? appUrl : resolvedWebUrl;
   const safeAppUrl = appUrl ? escapeHtml(appUrl) : "";
+  const safeWebUrl = resolvedWebUrl ? escapeHtml(resolvedWebUrl) : "";
   const safeFallbackUrl = resolvedUrl ? escapeHtml(resolvedUrl) : "";
   return `<!doctype html>
 <html lang="en">
@@ -6347,7 +6383,7 @@ function renderCallbackHtml(
       <h1>${escapeHtml(title)}</h1>
       <p>${escapeHtml(body)}</p>
       ${isMobile && appUrl ? `<a href="${safeAppUrl}">Open ListingOS</a><p class="hint">If the app does not open automatically, tap the button.</p>` : ""}
-      ${!isMobile ? `<a href="https://listingos.expo.app/">Open ListingOS</a><p class="hint">You are being redirected to the ListingOS web app.</p>` : ""}
+      ${!isMobile && safeWebUrl ? `<a href="${safeWebUrl}">Open ListingOS</a><p class="hint">You are being redirected to the ListingOS web app.</p>` : ""}
     </div>
   </body>
 </html>`;

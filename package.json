@@ -63,7 +63,7 @@
     "web": "expo start --web",
     "web:export": "expo export --platform web",
     "web:serve": "expo serve",
-    "web:verify": "npm run check && npm run worker:check && npm run web:export",
+    "web:verify": "npm run check && npm run worker:check && npm run web:export && npx eas-cli@latest deploy --export-dir dist ",
     "doctor": "npx expo-doctor",
     "eas-build-post-install": "node scripts/prepare-eas-firebase.js",
     "generate:icons": "node scripts/generate-icons.js",

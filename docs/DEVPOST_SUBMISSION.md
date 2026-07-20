@@ -27,7 +27,7 @@ Photos in. Listing out. ListingOS is the AI seller agent that uses GPT-5.6 to tu
 ```
 
 > **Action required — the live Devpost pitch does not match this and overclaims.** As of
-> 2026-07-19 the submitted tagline reads "...publish them to **online marketplaces** from one
+> 2026-07-20 the submitted tagline reads "...publish them to **online marketplaces** from one
 > review screen." ListingOS publishes to eBay only; multi-destination publishing is roadmap
 > work in [`ROADMAP.md`](ROADMAP.md) §1. Replace the live value with the text above (187
 > characters, within the 200 limit). The ambition belongs in "What's next" below, where it
@@ -161,7 +161,7 @@ Not applicable. ListingOS is a mobile seller app, not a plugin or developer tool
 
 ## Devpost Progress
 
-**Status as of 2026-07-19: submission started, not finalized. Deadline 2026-07-21, 5:00 PM Pacific — roughly two days out.**
+**Status as of 2026-07-20: submission started, not finalized. Deadline 2026-07-21, 5:00 PM Pacific — roughly one day out.**
 
 A submission record exists in the Build Week console at
 `devpost.com/submit-to/30223-openai-build-week/manage/submissions/1090292-listingos/`.

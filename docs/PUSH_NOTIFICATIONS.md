@@ -113,7 +113,7 @@ Latest verified Android standalone test:
 - Worker push proof: `POST /api/devices/test-notification` returned `{"ok":true,"tokenCount":1,"sentCount":1,"inactiveCount":0,"expoAccepted":true}`.
 - Delivery proof: Android posted `Notification(channel=publishing ...)` for `com.jongan69.listingos`; screenshot captured at `/tmp/listingos-after-push.png`.
 
-The current-source `1.0.1 (10)` build has been installed and launch-tested on the same A16, but a fresh push delivery proof has not been repeated after the store submission. iOS remains unverified because the registered physical iPhone is currently offline from this workstation.
+The last documented installed Android proof run used `1.0.1 (10)` on the same A16. Current source metadata now tracks `1.0.1 (14)` (versionCode 14), and a fresh push delivery proof has not yet been repeated after that metadata change. iOS remains unverified because the registered physical iPhone is currently offline from this workstation.
 
 The test endpoint is session protected:
 

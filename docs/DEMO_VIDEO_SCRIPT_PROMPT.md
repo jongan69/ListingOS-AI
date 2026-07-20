@@ -199,4 +199,4 @@ Do not create duplicate production eBay listings while recording. Use proof mode
 
 **Where the judges actually decide.** Beat 5. Most hackathon videos say "we used GPT-5.6." Very few can say "we constrained it to a JSON Schema, validated the output before persistence, intersected it with third-party evidence, and built a refusal path for low-confidence identity." That last part is the highest-value 8 seconds in the video — the card-pricing lock is the clearest signal that you built a product and not a demo.
 
-**Timeline.** The Build Week window closes **July 21, 2026 at 5:00 PM Pacific** — roughly two days out. Remaining blockers per `DEVPOST_SUBMISSION.md`: record the human voiceover, cut the final edit, upload publicly to YouTube, add the URL to Devpost, accept the rules, and submit.
+**Timeline.** The Build Week window closes **July 21, 2026 at 5:00 PM Pacific** — roughly one day out. Remaining blockers per `DEVPOST_SUBMISSION.md`: record the human voiceover, cut the final edit, upload publicly to YouTube, add the URL to Devpost, accept the rules, and submit.
