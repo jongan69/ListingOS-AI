@@ -153,6 +153,21 @@ Use the production Worker configured in `src/config/app.ts`:
 npm run dev
 ```
 
+For payment flow checks with RevenueCat, use a native dev-client build (not Expo Go). If the packager becomes unstable, use:
+
+```bash
+npm run dev:tunnel
+```
+
+Use tunnel mode when the test device is on a different network than the workstation. Use `npm run dev` for same-network local testing.
+
+Before RC payment tests, ensure `.env` includes:
+
+```bash
+EXPO_PUBLIC_REVENUECAT_MODE=test
+EXPO_PUBLIC_REVENUECAT_TEST_API_KEY=...
+```
+
 For a direct Android native build:
 
 ```bash
@@ -182,6 +197,7 @@ Local Worker execution is useful for route development. OAuth callbacks, public 
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Start one clean Expo development-client server |
+| `npm run dev:tunnel` | Start Expo dev-client on tunnel mode with clear cache for bundle stability |
 | `npm run android` | Build and run the native Android app |
 | `npm run lint` | Run ESLint with the Expo flat configuration |
 | `npm run check:docs` | Verify every tracked local Markdown link |

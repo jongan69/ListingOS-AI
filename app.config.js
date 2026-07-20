@@ -38,6 +38,7 @@ module.exports = ({ config: baseConfig }) => {
           color: "#66E1D1",
         },
       ],
+      "./plugins/with-listingos-billing-manifest",
     ],
   };
 

@@ -423,6 +423,39 @@ export const BillingEventSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
+export const RevenueCatWebhookTraceQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  appUserId: z.string().optional(),
+  eventType: z.string().optional(),
+});
+
+export const RevenueCatWebhookTraceItemSchema = z.object({
+  traceId: z.string(),
+  eventType: z.string(),
+  eventId: z.string().nullable().default(null),
+  appUserId: z.string(),
+  customerId: z.string(),
+  packageId: z.string().nullable(),
+  timestamp: z.string(),
+  receivedAt: z.string(),
+  isPurchaseTransition: z.boolean(),
+  isReplay: z.boolean().default(false),
+  signatureVerified: z.boolean().default(false),
+  signatureStatus: z.string().nullable().default(null),
+  eventName: z.string(),
+  source: z.string().default("revenuecat_webhook"),
+  sellerAccountId: z.string().nullable(),
+  eventPayload: z.record(z.string(), z.unknown()).optional(),
+  rawPayload: z.record(z.string(), z.unknown()).optional(),
+  rawType: z.string().nullable().default(null),
+});
+
+export const RevenueCatWebhookTraceResponseSchema = z.object({
+  generatedAt: z.string(),
+  traces: z.array(RevenueCatWebhookTraceItemSchema),
+  limit: z.number().int().nonnegative(),
+});
+
 export type ListingMode = z.infer<typeof ListingModeSchema>;
 export type PricingStrategy = z.infer<typeof PricingStrategySchema>;
 export type DraftJobStatus = z.infer<typeof DraftJobStatusSchema>;
@@ -453,5 +486,8 @@ export type BillingSyncRequest = z.infer<typeof BillingSyncRequestSchema>;
 export type BillingEvent = z.infer<typeof BillingEventSchema>;
 export type BillingSyncRequestInput = z.input<typeof BillingSyncRequestSchema>;
 export type BillingEventInput = z.input<typeof BillingEventSchema>;
+export type RevenueCatWebhookTraceQuery = z.input<typeof RevenueCatWebhookTraceQuerySchema>;
+export type RevenueCatWebhookTraceItem = z.infer<typeof RevenueCatWebhookTraceItemSchema>;
+export type RevenueCatWebhookTraceResponse = z.infer<typeof RevenueCatWebhookTraceResponseSchema>;
 export type CameraSessionCreateInput = z.input<typeof CameraSessionCreateInputSchema>;
 export type CameraSession = z.infer<typeof CameraSessionSchema>;

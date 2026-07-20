@@ -82,7 +82,7 @@ import {
 import { type Palette } from "@/theme/palette";
 import { useGradients, usePalette } from "@/theme/theme";
 
-export function DashboardScreen() {
+export function DashboardScreen({ footer }: { footer?: ReactNode }) {
   const palette = usePalette();
   const gradients = useGradients();
   const styles = useMemo(() => createStyles(palette), [palette]);
@@ -464,15 +464,17 @@ export function DashboardScreen() {
       await api.recordBillingEvent(apiContext, { eventName: "restore_attempted" });
       const state = await restoreRevenueCatPurchases();
       const fallbackAppUserId = meQuery.data ? `seller:${meQuery.data.sellerAccountId}` : "seller:unknown";
-      return api.syncBilling(apiContext, revenueCatStateToSyncRequest(state, fallbackAppUserId));
+      const synced = await api.syncBilling(apiContext, revenueCatStateToSyncRequest(state, fallbackAppUserId));
+      return { state, synced };
     },
-    onSuccess: async (summary) => {
-      await api.recordBillingEvent(apiContext, { eventName: "restore_completed", plan: summary.plan }).catch(() => undefined);
+    onSuccess: async ({ state, synced }) => {
+      setRevenueCatState(state);
+      await api.recordBillingEvent(apiContext, { eventName: "restore_completed", plan: synced.plan }).catch(() => undefined);
       await queryClient.invalidateQueries({ queryKey: ["billing", apiBaseUrl, sessionToken] });
       showToast({
         title: "Purchases restored",
-        message: summary.plan === "free" ? "No active paid plan was found." : `${summary.plan} is active.`,
-        tone: summary.plan === "free" ? "info" : "success",
+        message: synced.plan === "free" ? "No active paid plan was found." : `${synced.plan} is active.`,
+        tone: synced.plan === "free" ? "info" : "success",
       });
     },
     onError: (error) => {
@@ -763,7 +765,7 @@ export function DashboardScreen() {
 
   return (
     <View style={styles.screenShell}>
-      <AppScreen onRefresh={refreshDashboard}>
+      <AppScreen footer={footer} onRefresh={refreshDashboard}>
         <View style={styles.identityRow}>
           <View style={styles.identityLeft}>
             <Image accessibilityLabel="ListingOS" accessibilityRole="image" contentFit="cover" source={brand.mark} style={styles.identityMark} transition={180} />
@@ -811,6 +813,13 @@ export function DashboardScreen() {
             ) : (
               <Text aria-level={1} role="heading" selectable style={styles.heroHeadline}>Connect eBay, then pick one product</Text>
             )}
+
+            <View style={styles.heroMetaRow}>
+              <Text selectable style={styles.bodyText}>Capture → AI draft → review/proof → fixed-price eBay publish.</Text>
+              <Text selectable style={styles.bodyText}>
+                Live publish creates a real listing. Use Proof Mode for non-mutating review and publish evidence.
+              </Text>
+            </View>
 
             <View style={styles.captureModeStrip}>
               <CaptureModePill

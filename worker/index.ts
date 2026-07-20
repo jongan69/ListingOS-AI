@@ -8,6 +8,8 @@ import {
   BillingPlanSchema,
   BillingSummarySchema,
   BillingSyncRequestSchema,
+  RevenueCatWebhookTraceQuerySchema,
+  RevenueCatWebhookTraceResponseSchema,
   CameraSessionCreateInputSchema,
   CameraSessionSchema,
   DraftJobSchema,
@@ -32,6 +34,8 @@ import {
   type BillingPlan,
   type BillingSummary,
   type BillingSyncRequest,
+  type RevenueCatWebhookTraceItem,
+  type RevenueCatWebhookTraceResponse,
   type DraftPayload,
   type PricingEvidence,
   type ProductIdentity,
@@ -73,6 +77,24 @@ const AI_MODEL_PRICING: Record<string, { input: number; cachedInput: number; out
   "gpt-5.6-luna": { input: 1, cachedInput: 0.1, output: 6 },
 };
 
+const REVENUECAT_WEBHOOK_RELEVANT_EVENT_TYPES = new Set([
+  "purchase_completed",
+  "entitlement_granted",
+  "restore",
+  "subscription_renewed",
+  "subscription_renewal",
+  "initial_purchase",
+  "purchase",
+  "renewal",
+]);
+
+type RevenueCatWebhookSignatureCheck = {
+  checked: boolean;
+  provided: boolean;
+  valid: boolean;
+  status: "ok" | "missing_signature" | "missing_signing_secret" | "invalid_format" | "signature_mismatch";
+};
+
 type WorkerLogLevel = "info" | "warn" | "error";
 
 function logWorkerItem(
@@ -90,6 +112,173 @@ function logWorkerItem(
   if (level === "error") console.error(payload);
   else if (level === "warn") console.warn(payload);
   else console.log(payload);
+}
+
+function firstNonEmptyString(values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function normalizeWebhookEventType(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[.\-\s]+/g, "_");
+}
+
+function extractRevenueCatEventId(event: Record<string, unknown>, eventPayload: Record<string, unknown> | null) {
+  const candidates = [
+    event.id,
+    event.eventId,
+    event.event_id,
+    eventPayload?.id,
+    eventPayload?.eventId,
+    eventPayload?.event_id,
+    event.original_transaction_id,
+    event.originalTransactionId,
+  ];
+  return firstNonEmptyString(candidates);
+}
+
+function parseWebhookSignatureHeader(value: string | undefined) {
+  if (!value) return null;
+  const headerParts = value.split(",").map((part) => part.trim()).filter(Boolean);
+  for (const part of headerParts) {
+    const [name, ...rest] = part.split("=");
+    const candidate = rest.length > 0 ? rest.join("=").trim() : part.trim();
+    if (candidate.length === 0) continue;
+    const key = (name ?? "").toLowerCase();
+    if (key === "v1" || key === "sha256" || key === "signature" || key === "revenuecat" || part === candidate) {
+      return candidate;
+    }
+  }
+  return headerParts[0] ?? null;
+}
+
+function bytesToHex(bytes: ArrayBuffer) {
+  return [...new Uint8Array(bytes)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function bytesToBase64(bytes: ArrayBuffer) {
+  const binary = String.fromCharCode(...new Uint8Array(bytes));
+  return btoa(binary);
+}
+
+function secureStringEquals(a: string, b: string) {
+  let diff = a.length ^ b.length;
+  const max = Math.max(a.length, b.length);
+  for (let index = 0; index < max; index += 1) {
+    const left = index < a.length ? a.charCodeAt(index) : 0;
+    const right = index < b.length ? b.charCodeAt(index) : 0;
+    diff |= left ^ right;
+  }
+  return diff === 0;
+}
+
+async function verifyWebhookSignature(rawBody: string, signatureHeader: string | undefined, secret: string | undefined): Promise<RevenueCatWebhookSignatureCheck> {
+  const signature = parseWebhookSignatureHeader(signatureHeader);
+  if (!signatureHeader) {
+    return {
+      checked: false,
+      provided: false,
+      valid: false,
+      status: "missing_signature",
+    };
+  }
+  if (!signature) {
+    return {
+      checked: true,
+      provided: true,
+      valid: false,
+      status: "invalid_format",
+    };
+  }
+  if (!secret) {
+    return {
+      checked: true,
+      provided: true,
+      valid: false,
+      status: "missing_signing_secret",
+    };
+  }
+  const signingKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const digest = await crypto.subtle.sign("HMAC", signingKey, new TextEncoder().encode(rawBody));
+  const expectedHex = bytesToHex(digest);
+  const expectedBase64 = bytesToBase64(digest);
+  const signatureTrimmed = signature.trim();
+  const valid = secureStringEquals(signatureTrimmed.toLowerCase(), expectedHex.toLowerCase())
+    || secureStringEquals(signatureTrimmed, expectedBase64)
+    || secureStringEquals(signatureTrimmed, expectedHex.toLowerCase())
+    || secureStringEquals(signatureTrimmed.toUpperCase(), expectedHex.toUpperCase());
+  return {
+    checked: true,
+    provided: true,
+    valid,
+    status: valid ? "ok" : "signature_mismatch",
+  };
+}
+
+async function hasProcessedWebhookEvent(
+  env: Bindings,
+  sellerAccountId: string,
+  webhookEventId: string,
+) {
+  try {
+    const previousRows = await env.DB.prepare(
+      "SELECT payload_json FROM app_events WHERE seller_account_id = ? AND event_type = 'billing.revenuecat_webhook' ORDER BY created_at DESC LIMIT 50",
+    ).bind(sellerAccountId).all<{ payload_json: string }>();
+    for (const row of previousRows.results ?? []) {
+      const payload = parseJsonRecord(row.payload_json);
+      if (!payload) continue;
+      const candidate = stringOr(payload.eventId, null);
+      if (candidate && candidate === webhookEventId) return true;
+    }
+  } catch (error) {
+    logWorkerItem("warn", "billing.revenuecat_webhook.replay_check_failed", {}, {
+      sellerAccountId,
+      webhookEventId,
+      error: error instanceof Error ? error.message : "Unknown replay check error",
+    });
+  }
+  return false;
+}
+
+function toIsoTimestamp(value: unknown, fallback: string) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  }
+  return fallback;
+}
+
+async function safeRecordRevenueCatWebhookEvent(env: Bindings, sellerAccountId: string | null, eventType: string, payload: Record<string, unknown>) {
+  await recordAppEvent(env, sellerAccountId, eventType, payload).catch((error) => {
+    logWorkerItem("warn", "billing.revenuecat_webhook.record_failed", {}, {
+      eventType,
+      error: error instanceof Error ? error.message : "Unknown logging error",
+    });
+  });
 }
 
 async function queueMessageContext(env: Bindings, message: QueueMessage) {
@@ -438,17 +627,42 @@ app.get("/api/session/ebay/callback", async (c) => {
   const code = c.req.query("code") ?? "";
   const error = c.req.query("error");
   const authSessionId = await c.env.SESSION_KV.get(`oauth-state:${state}`);
+  const isMobileWebview = isProbablyMobileCallback(c.req.header("user-agent"));
   if (!authSessionId) {
-    return c.html(renderCallbackHtml("Expired auth session.", "Start the seller sign-in flow again from the mobile app."), 400);
+    return c.html(
+      renderCallbackHtml(
+        "Expired auth session.",
+        "Start the seller sign-in flow again from ListingOS.",
+        undefined,
+        isMobileWebview,
+      ),
+      400,
+    );
   }
   if (error) {
     await c.env.DB.prepare(
       "UPDATE auth_sessions SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?",
     ).bind(error, new Date().toISOString(), authSessionId).run();
-    return c.html(renderCallbackHtml("eBay sign-in cancelled.", error, { authSessionId, status: "failed" }), 400);
+    return c.html(
+      renderCallbackHtml(
+        "eBay sign-in cancelled.",
+        error,
+        { authSessionId, status: "failed" },
+        isMobileWebview,
+      ),
+      400,
+    );
   }
   if (!code) {
-    return c.html(renderCallbackHtml("Missing eBay code.", "The callback reached the app without an authorization code.", { authSessionId, status: "failed" }), 400);
+    return c.html(
+      renderCallbackHtml(
+        "Missing eBay code.",
+        "The callback reached ListingOS without an authorization code.",
+        { authSessionId, status: "failed" },
+        isMobileWebview,
+      ),
+      400,
+    );
   }
 
   try {
@@ -482,6 +696,7 @@ app.get("/api/session/ebay/callback", async (c) => {
         "Seller account connected.",
         "Opening ListingOS now. If it does not open automatically, use the button below.",
         { authSessionId, status: "complete" },
+        isMobileWebview,
       ),
     );
   } catch (callbackError) {
@@ -489,7 +704,15 @@ app.get("/api/session/ebay/callback", async (c) => {
     await c.env.DB.prepare(
       "UPDATE auth_sessions SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?",
     ).bind(message, new Date().toISOString(), authSessionId).run();
-    return c.html(renderCallbackHtml("eBay sign-in failed.", message, { authSessionId, status: "failed" }), 500);
+    return c.html(
+      renderCallbackHtml(
+        "eBay sign-in failed.",
+        message,
+        { authSessionId, status: "failed" },
+        isMobileWebview,
+      ),
+      500,
+    );
   }
 });
 
@@ -537,46 +760,306 @@ app.post("/api/billing/events", requireSession, async (c) => {
 
 app.post("/api/revenuecat/webhook", async (c) => {
   const expectedToken = c.env.REVENUECAT_WEBHOOK_AUTH_TOKEN;
+  const expectedSecret = c.env.REVENUECAT_SECRET_API_KEY?.trim();
   const authorization = c.req.header("Authorization") ?? "";
+  const signatureHeader = c.req.header("x-revenuecat-signature")
+    ?? c.req.header("x-revenuecat-webhook-signature");
   const token = authorization.replace(/^Bearer\s+/i, "").trim();
+  const receivedAt = new Date().toISOString();
+  const rawBody = await c.req.text().catch(() => "");
+  const body = parseJsonValue(rawBody);
+  const event = asRecord(body) ?? {};
+  const eventPayload = asRecord(event.event);
+  const signatureCheck = await verifyWebhookSignature(rawBody, signatureHeader, expectedSecret);
+  const envelopeType = eventPayload?.type ?? event?.type ?? event?.eventType;
+  const rawEventType = stringOr(envelopeType, "unknown");
+  const eventType = normalizeWebhookEventType(rawEventType);
+  const webhookId = extractRevenueCatEventId(event, eventPayload);
+  const normalizedWebhookId = webhookId ? webhookId.trim() : null;
+  const appUserId = stringOr(
+    event?.app_user_id
+      ?? event?.appUserId
+      ?? eventPayload?.app_user_id
+      ?? eventPayload?.appUserId,
+    "",
+  );
+  const customerId = stringOr(
+    event?.customer_id
+      ?? event?.customerId
+      ?? eventPayload?.customer_id
+      ?? eventPayload?.customerId
+      ?? appUserId,
+    "",
+  );
+  const traceAppUserId = appUserId || customerId || null;
+  const packageId = firstNonEmptyString([
+    eventPayload?.package_id,
+    eventPayload?.packageId,
+    eventPayload?.product_id,
+    eventPayload?.productId,
+    eventPayload?.offer_id,
+    eventPayload?.offerId,
+    eventPayload?.store_product_id,
+    eventPayload?.storeProductId,
+    event?.package_id,
+    event?.packageId,
+    event?.product_id,
+    event?.productId,
+    event?.offer_id,
+    event?.offerId,
+    event?.store_product_id,
+    event?.storeProductId,
+  ]);
+  const eventTimestamp = toIsoTimestamp(
+    eventPayload?.timestamp ?? eventPayload?.event_timestamp ?? eventPayload?.event_ts ?? event?.timestamp,
+    receivedAt,
+  );
+  const isPurchaseTransition = REVENUECAT_WEBHOOK_RELEVANT_EVENT_TYPES.has(eventType);
+  const traceTemplate = {
+    source: "revenuecat_webhook",
+    receivedAt,
+    appUserId: traceAppUserId ?? "",
+    customerId: customerId || null,
+    packageId,
+    eventType,
+    rawType: rawEventType,
+    isPurchaseTransition,
+    eventId: normalizedWebhookId,
+    isReplay: false,
+    signatureVerified: signatureCheck.valid,
+    signatureStatus: signatureCheck.status,
+    eventName: "billing.revenuecat_webhook.event",
+  };
   if (!expectedToken && billingEnforcementMode(c.env) === "enforce") {
+    logWorkerItem("error", "billing.revenuecat_webhook.auth.config_error", {}, {
+      enforcementMode: billingEnforcementMode(c.env),
+      eventType,
+      appUserId,
+      customerId,
+    });
+    await safeRecordRevenueCatWebhookEvent(c.env, null, "billing.revenuecat_webhook.config", {
+      ...traceTemplate,
+      reason: "missing_token",
+      timestamp: receivedAt,
+    });
     return c.json({ error: "RevenueCat webhook token is not configured." }, 503);
   }
   if (expectedToken && token !== expectedToken) {
+    logWorkerItem("warn", "billing.revenuecat_webhook.auth.failed", {}, {
+      hasAuthHeader: Boolean(authorization),
+      eventType,
+      appUserId,
+      customerId,
+      receivedAt,
+    });
+    await safeRecordRevenueCatWebhookEvent(c.env, null, "billing.revenuecat_webhook.auth", {
+      ...traceTemplate,
+      reason: "token_mismatch",
+      timestamp: receivedAt,
+    });
     return c.json({ error: "Unauthorized." }, 401);
   }
-  const body = await c.req.json().catch(() => ({}));
-  const event = typeof body.event === "object" && body.event ? body.event as Record<string, unknown> : body as Record<string, unknown>;
-  const appUserId = stringOr(event.app_user_id ?? event.appUserId, "");
+  if (signatureCheck.status === "missing_signing_secret") {
+    logWorkerItem("error", "billing.revenuecat_webhook.auth.config_error", {}, {
+      enforcementMode: billingEnforcementMode(c.env),
+      eventType,
+      eventId: normalizedWebhookId,
+      appUserId,
+      customerId,
+      signatureStatus: signatureCheck.status,
+    });
+    await safeRecordRevenueCatWebhookEvent(c.env, null, "billing.revenuecat_webhook.config", {
+      ...traceTemplate,
+      reason: "missing_signing_secret",
+      timestamp: receivedAt,
+    });
+    return c.json({ error: "RevenueCat webhook signing secret is not configured." }, 503);
+  }
+  if (!signatureCheck.valid) {
+    logWorkerItem("warn", "billing.revenuecat_webhook.signature.failed", {}, {
+      eventType,
+      appUserId,
+      customerId,
+      eventId: normalizedWebhookId,
+      hasSignatureHeader: Boolean(signatureHeader),
+      signatureStatus: signatureCheck.status,
+      receivedAt,
+    });
+    await safeRecordRevenueCatWebhookEvent(c.env, null, "billing.revenuecat_webhook.signature", {
+      ...traceTemplate,
+      reason: signatureCheck.status,
+      timestamp: receivedAt,
+    });
+    return c.json({ error: "Unauthorized." }, 401);
+  }
   if (!appUserId) {
+    logWorkerItem("warn", "billing.revenuecat_webhook.skipped", {}, {
+      reason: "missing_app_user_id",
+      eventType,
+      rawType: rawEventType,
+      hasBody: Boolean(body),
+      appUserId,
+      customerId,
+    });
+    await safeRecordRevenueCatWebhookEvent(c.env, null, "billing.revenuecat_webhook", {
+      ...traceTemplate,
+      reason: "missing_app_user_id",
+      timestamp: eventTimestamp,
+    });
     return c.json({ ok: true, skipped: "missing_app_user_id" });
   }
   const profile = await c.env.DB.prepare(
     "SELECT seller_account_id FROM billing_profiles WHERE revenuecat_app_user_id = ?",
   ).bind(appUserId).first<{ seller_account_id: string }>();
   if (!profile) {
+    logWorkerItem("info", "billing.revenuecat_webhook.skipped", {}, {
+      reason: "unknown_app_user_id",
+      appUserId,
+      eventType,
+      customerId,
+    });
+    await safeRecordRevenueCatWebhookEvent(c.env, null, "billing.revenuecat_webhook", {
+      ...traceTemplate,
+      reason: "unknown_app_user_id",
+      timestamp: eventTimestamp,
+    });
     return c.json({ ok: true, skipped: "unknown_app_user_id" });
   }
-  const entitlementIds = Array.isArray(event.entitlement_ids)
-    ? event.entitlement_ids.filter((item): item is string => typeof item === "string")
+  const entitlementIds = Array.isArray(eventPayload?.entitlement_ids)
+    ? eventPayload.entitlement_ids.filter((item): item is string => typeof item === "string")
+    : Array.isArray(event?.entitlement_ids)
+      ? event.entitlement_ids.filter((item): item is string => typeof item === "string")
     : Array.isArray(event.entitlements)
       ? event.entitlements.filter((item): item is string => typeof item === "string")
       : [];
-  const eventType = stringOr(event.type, "unknown");
   const revokedTypes = new Set(["EXPIRATION", "REFUND"]);
-  const activeEntitlements = revokedTypes.has(eventType) ? [] : entitlementIds;
+  const activeEntitlements = revokedTypes.has(rawEventType.toUpperCase()) ? [] : entitlementIds;
+  const eventTrace = {
+    ...traceTemplate,
+    eventId: normalizedWebhookId,
+    timestamp: eventTimestamp,
+    isPurchaseTransition,
+    rawEntitlementIds: entitlementIds,
+    eventPayload: eventPayload ? {
+      eventType: rawEventType,
+      environment: eventPayload.environment,
+      app: eventPayload.app ?? null,
+      storefront: eventPayload.storefront ?? null,
+      offerType: eventPayload.offer_type ?? null,
+      periodType: eventPayload.period_type ?? null,
+    } : null,
+    rawPayload: event,
+  };
+  const isReplay = normalizedWebhookId ? await hasProcessedWebhookEvent(c.env, profile.seller_account_id, normalizedWebhookId) : false;
+  if (isReplay) {
+    logWorkerItem("info", "billing.revenuecat_webhook.replay", {}, {
+      sellerAccountId: profile.seller_account_id,
+      eventId: normalizedWebhookId,
+      appUserId,
+      eventType,
+      packageId,
+    });
+    await safeRecordRevenueCatWebhookEvent(c.env, profile.seller_account_id, "billing.revenuecat_webhook", {
+      ...eventTrace,
+      isReplay: true,
+      reason: "duplicate_event",
+    });
+    return c.json({ ok: true, replay: true });
+  }
   await syncBillingProfile(c.env, profile.seller_account_id, {
     appUserId,
     source: "revenuecat_webhook",
     activeEntitlements,
-    subscriptionStatus: eventType.toLowerCase(),
-    customerInfo: body,
+    subscriptionStatus: rawEventType.toLowerCase(),
+    customerInfo: {
+      ...event,
+      __revenuecat_webhook_trace: eventTrace,
+    },
   });
-  await recordAppEvent(c.env, profile.seller_account_id, "billing.revenuecat_webhook", {
+  await safeRecordRevenueCatWebhookEvent(c.env, profile.seller_account_id, "billing.revenuecat_webhook", {
+    ...eventTrace,
     eventType,
     activeEntitlements,
+    isReplay: false,
   });
-  return c.json({ ok: true });
+  logWorkerItem("info", "billing.revenuecat_webhook.processed", {}, {
+    sellerAccountId: profile.seller_account_id,
+    appUserId,
+    packageId,
+    eventType,
+    isPurchaseTransition,
+    isReplay,
+  });
+  return c.json({ ok: true, replay: false });
+});
+
+app.get("/api/internal/revenuecat/webhook-traces", async (c) => {
+  if (!isInternalAnalyticsAuthorized(c.req.header("Authorization"), c.env.INTERNAL_ANALYTICS_TOKEN)) {
+    return c.json({ error: "Unauthorized." }, 401);
+  }
+  const parsed = RevenueCatWebhookTraceQuerySchema.parse({
+    limit: c.req.query("limit") ?? undefined,
+    appUserId: c.req.query("appUserId") ?? undefined,
+    eventType: c.req.query("eventType") ?? undefined,
+  });
+  const eventLimit = Math.max(1, Math.min(200, parsed.limit));
+  const rows = await c.env.DB.prepare(
+    `SELECT
+      id,
+      seller_account_id,
+      payload_json,
+      created_at
+     FROM app_events
+     WHERE event_type LIKE 'billing.revenuecat_webhook%'
+     ORDER BY created_at DESC
+     LIMIT ?`,
+  ).bind(eventLimit * 4).all<{
+    id: string;
+    seller_account_id: string | null;
+    payload_json: string;
+    created_at: string;
+  }>();
+
+  const traces = (rows.results ?? []).reduce<RevenueCatWebhookTraceItem[]>((acc, row) => {
+    if (acc.length >= eventLimit) return acc;
+    const payload = parseJsonRecord(row.payload_json);
+    if (!payload) return acc;
+
+    const traceEventType = normalizeWebhookEventType(stringOr(payload.eventType, stringOr(payload.rawType, "unknown")));
+    if (parsed.eventType && traceEventType !== normalizeWebhookEventType(parsed.eventType)) return acc;
+
+    const appUserId = parsed.appUserId ? stringOr(payload.appUserId, "") : stringOr(payload.appUserId, null);
+    if (parsed.appUserId && appUserId !== parsed.appUserId) return acc;
+
+    acc.push({
+      traceId: row.id,
+      eventType: traceEventType,
+      eventId: stringOr(payload.eventId, null),
+      appUserId: stringOr(payload.appUserId, ""),
+      customerId: stringOr(payload.customerId, ""),
+      packageId: stringOr(payload.packageId, null),
+      timestamp: stringOr(payload.timestamp, row.created_at),
+      receivedAt: stringOr(payload.receivedAt, row.created_at),
+      isPurchaseTransition: payload.isPurchaseTransition === true,
+      isReplay: payload.isReplay === true,
+      signatureVerified: payload.signatureVerified === true,
+      signatureStatus: stringOr(payload.signatureStatus, null),
+      eventName: stringOr(payload.eventName, "billing.revenuecat_webhook"),
+      source: stringOr(payload.source, "revenuecat_webhook"),
+      sellerAccountId: row.seller_account_id,
+      eventPayload: asRecord(payload.eventPayload) ?? undefined,
+      rawPayload: asRecord(payload.rawPayload) ?? undefined,
+      rawType: stringOr(payload.rawType, null),
+    });
+    return acc;
+  }, []);
+
+  const response: RevenueCatWebhookTraceResponse = RevenueCatWebhookTraceResponseSchema.parse({
+    generatedAt: new Date().toISOString(),
+    traces,
+    limit: eventLimit,
+  });
+  return c.json(response);
 });
 
 app.post("/api/devices/push-token", requireSession, async (c) => {
@@ -1847,6 +2330,15 @@ function parseJsonArray(value: string | null | undefined) {
     return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
   } catch {
     return [];
+  }
+}
+
+function parseJsonRecord(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
   }
 }
 
@@ -5806,18 +6298,31 @@ function sanitizeFileName(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, "-");
 }
 
-function renderCallbackHtml(title: string, body: string, deepLink?: { authSessionId: string; status: "complete" | "failed" }) {
+function isProbablyMobileCallback(userAgent: string | undefined) {
+  const normalized = userAgent?.toLowerCase() ?? "";
+  return normalized.includes("iphone") || normalized.includes("ipad") || normalized.includes("android") || normalized.includes("mobile");
+}
+
+function renderCallbackHtml(
+  title: string,
+  body: string,
+  deepLink?: { authSessionId: string; status: "complete" | "failed" },
+  isMobile = false,
+) {
   const appUrl = deepLink
     ? `listingos://?authSessionId=${encodeURIComponent(deepLink.authSessionId)}&authStatus=${encodeURIComponent(deepLink.status)}`
     : null;
+  const webUrl = "https://listingos.expo.app/";
+  const resolvedUrl = isMobile ? appUrl : webUrl;
   const safeAppUrl = appUrl ? escapeHtml(appUrl) : "";
+  const safeFallbackUrl = resolvedUrl ? escapeHtml(resolvedUrl) : "";
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)}</title>
-    ${appUrl ? `<meta http-equiv="refresh" content="1;url=${safeAppUrl}" />` : ""}
+    ${resolvedUrl ? `<meta http-equiv="refresh" content="1;url=${safeFallbackUrl}" />` : ""}
     <style>
       body { background: #08111f; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 24px; }
       .card { max-width: 560px; margin: 56px auto; padding: 24px; border-radius: 24px; border: 1px solid #22304a; background: linear-gradient(145deg, #101b2d, #0b1424); box-shadow: 0 24px 80px rgba(0,0,0,0.28); }
@@ -5827,11 +6332,11 @@ function renderCallbackHtml(title: string, body: string, deepLink?: { authSessio
       a { align-items: center; background: linear-gradient(135deg, #dff2ff, #66e1d1); border-radius: 999px; color: #04111d; display: inline-flex; font-weight: 800; justify-content: center; margin-top: 20px; min-height: 48px; padding: 0 20px; text-decoration: none; }
       .hint { color: #94a3b8; font-size: 13px; margin-top: 14px; }
     </style>
-    ${appUrl ? `<script>
+    ${resolvedUrl ? `<script>
       window.addEventListener("load", () => {
-        const appUrl = ${JSON.stringify(appUrl)};
+        const redirectUrl = ${JSON.stringify(resolvedUrl)};
         setTimeout(() => {
-          window.location.replace(appUrl);
+          window.location.replace(redirectUrl);
         }, 250);
       });
     </script>` : ""}
@@ -5841,7 +6346,8 @@ function renderCallbackHtml(title: string, body: string, deepLink?: { authSessio
       <p class="eyebrow">ListingOS</p>
       <h1>${escapeHtml(title)}</h1>
       <p>${escapeHtml(body)}</p>
-      ${appUrl ? `<a href="${safeAppUrl}">Open ListingOS</a><p class="hint">If the app does not open automatically, tap the button.</p>` : ""}
+      ${isMobile && appUrl ? `<a href="${safeAppUrl}">Open ListingOS</a><p class="hint">If the app does not open automatically, tap the button.</p>` : ""}
+      ${!isMobile ? `<a href="https://listingos.expo.app/">Open ListingOS</a><p class="hint">You are being redirected to the ListingOS web app.</p>` : ""}
     </div>
   </body>
 </html>`;

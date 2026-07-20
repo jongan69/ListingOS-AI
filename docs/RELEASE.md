@@ -11,6 +11,130 @@ ListingOS can be demoed as a standalone Android app without Expo Go, Metro, or a
 - Gradle APK: `android/app/build/outputs/apk/release/app-release.apk`
 - Demo APK copy: `dist/release/ListingOS-android-demo-release.apk`
 
+## RevenueCat environment strategy and payment matrix
+
+Use this only for payment checks. It is production-safe once EAS profile values are set and local `.env` is test-only.
+
+### Environment matrix (dev/debug vs release + dev-client)
+
+| Context | Command | RC mode source | RC key source | Start behavior |
+| --- | --- | --- | --- | --- |
+| Local debug (recommended) | `npm run dev:tunnel` | `.env` or shell override | `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` | Native dev-client only; test-mode SDK diagnostics should appear. |
+| Local clean native rebuild | `npx expo run:ios --device` / `npx expo run:android --device` | `.env` | `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` | Same as above after native build refresh. |
+| EAS dev-client (`development` / `preview`) | `npx eas-cli@latest build -p ios|android --profile development|preview` | `test` (from profile) | `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` (or build profile override) | Shared profile for internal QA and payment checks. |
+| EAS release/dev-client (`production`) | `npx eas-cli@latest build -p ios|android --profile production` | `production` (from profile) | `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` / `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` (plus optional `EXPO_PUBLIC_REVENUECAT_PROD_API_KEY` fallback only) | Real build-path verification only; never uses test store keys. |
+| Expo Go | `npx expo start` | n/a | n/a | **Not supported for payment checks.** Native Billing SDK must be present.
+
+### Release verification command bundle
+
+Collect a deterministic startup transcript each time you change `eas.json` or `.env` values:
+
+```sh
+mkdir -p artifacts/revenuecat/validation
+npx eas-cli@latest env:list > artifacts/revenuecat/validation/eas_env_list.log 2>&1
+cat src/config/app.ts | sed -n '1,220p' > artifacts/revenuecat/validation/app_config_contract.log
+cat .env | sed -n '1,80p' > artifacts/revenuecat/validation/env_snapshot.log
+cat eas.json | jq '.build.development.env, .build.preview.env, .build.production.env' > artifacts/revenuecat/validation/eas_profiles.json
+```
+
+### Clean native rebuild commands
+
+Create and reuse evidence logs:
+
+```sh
+mkdir -p artifacts/revenuecat/validation
+```
+
+iOS clean native rebuild:
+
+```sh
+rm -rf ios/Pods ios/build ios/Podfile.lock
+EXPO_PUBLIC_REVENUECAT_MODE=test \
+EXPO_PUBLIC_REVENUECAT_TEST_API_KEY=YOUR_REVENUECAT_TEST_PUBLIC_API_KEY \
+EXPO_PUBLIC_REVENUECAT_OFFERING_ID=default \
+npx expo prebuild --platform ios --clean \
+  2>&1 | tee artifacts/revenuecat/validation/ios_prebuild.log
+EXPO_PUBLIC_REVENUECAT_MODE=test \
+EXPO_PUBLIC_REVENUECAT_TEST_API_KEY=YOUR_REVENUECAT_TEST_PUBLIC_API_KEY \
+EXPO_PUBLIC_REVENUECAT_OFFERING_ID=default \
+npx expo run:ios --device \
+  2>&1 | tee artifacts/revenuecat/validation/ios_dev_client_install.log
+```
+
+Android clean native rebuild:
+
+```sh
+cd android && ./gradlew clean && cd ..
+EXPO_PUBLIC_REVENUECAT_MODE=test \
+EXPO_PUBLIC_REVENUECAT_TEST_API_KEY=YOUR_REVENUECAT_TEST_PUBLIC_API_KEY \
+EXPO_PUBLIC_REVENUECAT_OFFERING_ID=default \
+npx expo run:android --device \
+  2>&1 | tee artifacts/revenuecat/validation/android_dev_client_install.log
+```
+
+Expected outputs:
+
+1. iOS/Android install succeeds and app launches on target device.
+2. Startup log contains `[RevenueCat] mode=test` (local) or `[RevenueCat] mode=production` (release). The log includes `keySource` and `keyState`.
+3. Run the same two command blocks again with no source changes to validate reproducibility.
+
+### One-command startup for bundle stability
+
+```sh
+npm run dev:tunnel
+```
+
+Equivalent direct command:
+
+```sh
+expo start --dev-client --clear --host tunnel
+```
+
+Use this when Metro bundling or package discovery is unstable. Use `npm run dev` if the same network path is stable.
+
+### Startup transcript template
+
+To confirm the startup key path, launch once and capture startup logs:
+
+```sh
+npm run dev:tunnel > artifacts/revenuecat/validation/startup_trace.log 2>&1
+```
+
+Search `startup_trace.log` for the `[RevenueCat] mode=` line and verify that it matches the expected mode for the command and profile.
+
+### Validation checklist
+
+| Step | Command | Evidence file | Success signal |
+| --- | --- | --- | --- |
+| 1 | `npx eas-cli@latest env:list > artifacts/revenuecat/validation/eas_env_list.log 2>&1` | `artifacts/revenuecat/validation/eas_env_list.log` | Production and development profiles resolve keys consistently across environments. |
+| 2 | `cat .env | sed -n '1,80p' > artifacts/revenuecat/validation/env_snapshot.log` | `artifacts/revenuecat/validation/env_snapshot.log` | `EXPO_PUBLIC_REVENUECAT_MODE` is `test` for local checks. |
+| 3 | `cat eas.json | jq '.build.development.env, .build.preview.env, .build.production.env' > artifacts/revenuecat/validation/eas_profiles.json` | `artifacts/revenuecat/validation/eas_profiles.json` | Development and preview profiles are `test`; production is `production`. |
+| 4 | `npm run dev:tunnel > artifacts/revenuecat/validation/startup_trace.log 2>&1` (stop on first install prompt) | `artifacts/revenuecat/validation/startup_trace.log` | Log line confirms `[RevenueCat] mode=test` and expected source prefix. |
+| 5 | iOS clean native rebuild | `artifacts/revenuecat/validation/ios_prebuild.log`, `artifacts/revenuecat/validation/ios_dev_client_install.log` | Successful install + launch + RC source line in startup trace. |
+| 6 | Android clean native rebuild | `artifacts/revenuecat/validation/android_dev_client_install.log` | Successful install + launch + RC source line in startup trace. |
+| 7 | Replay steps 5-6 after an unchanged second run | same files + appended lines | RC startup line and mode are unchanged (deterministic). |
+
+### Migration notes: test-only -> dual-mode production
+
+1. Keep local `.env` at `EXPO_PUBLIC_REVENUECAT_MODE=test` for dev-device checks.
+2. Add explicit `EXPO_PUBLIC_REVENUECAT_MODE=production` and platform keys in `eas.json -> build.production.env`.
+3. Keep `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` in local/dev profiles only.
+4. If a single public production key is still in use, set `EXPO_PUBLIC_REVENUECAT_PROD_API_KEY` as a temporary fallback and add an issue to remove it once `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` and `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` are both verified.
+5. Add release validation using `eas env:list`, startup trace, and one reproducibility rerun.
+
+### Rollback steps
+
+To revert immediately while keeping a safe production posture:
+
+1. Revert the env and config commit (or the three files touched in that commit): `.env`, `.env.example`, `eas.json`, `src/config/app.ts`.
+2. Re-run:
+
+```sh
+npm run check
+```
+
+3. Redeploy from the prior approved build profile and re-run `eas env:list` to confirm restored profile values.
+
 ## Local Standalone Android Build
 
 ```sh

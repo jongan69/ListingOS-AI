@@ -40,6 +40,11 @@ export default function RootLayout() {
                 <Stack.Screen name="index" options={{ title: brand.name }} />
                 <Stack.Screen name="batches/[batch-id]" options={{ title: "Draft Queue" }} />
                 <Stack.Screen name="drafts/[draft-id]" options={{ title: "Draft Review" }} />
+                <Stack.Screen name="app-support" options={{ title: "Support" }} />
+                <Stack.Screen name="privacy" options={{ title: "Privacy Policy" }} />
+                <Stack.Screen name="terms" options={{ title: "Terms" }} />
+                <Stack.Screen name="support" options={{ title: "Support" }} />
+                <Stack.Screen name="legal/terms" options={{ title: "Terms" }} />
               </Stack>
             </ToastProvider>
           </SafeAreaProvider>

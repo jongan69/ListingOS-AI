@@ -25,6 +25,8 @@ Required secrets:
 - `EBAY_CLIENT_SECRET`
 - `EBAY_RUNAME`
 - `APP_ENCRYPTION_SECRET`
+- `REVENUECAT_SECRET_API_KEY`
+- `REVENUECAT_WEBHOOK_AUTH_TOKEN`
 
 Optional values:
 
@@ -74,6 +76,8 @@ npx wrangler secret put EBAY_CLIENT_ID
 npx wrangler secret put EBAY_CLIENT_SECRET
 npx wrangler secret put EBAY_RUNAME
 npx wrangler secret put APP_ENCRYPTION_SECRET
+npx wrangler secret put REVENUECAT_SECRET_API_KEY
+npx wrangler secret put REVENUECAT_WEBHOOK_AUTH_TOKEN
 ```
 
 `PUBLIC_API_BASE_URL` must be the externally reachable Worker origin. eBay uses URLs under this origin to fetch listing photos.

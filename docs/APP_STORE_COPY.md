@@ -6,7 +6,7 @@ Use this file as the canonical public copy for App Store Connect, Google Play, D
 
 ListingOS is the camera-first AI listing machine for eBay sellers.
 
-It turns product photos into a complete seller workflow: identify the item, draft the listing, price it, check eBay requirements, resolve blockers, and publish from one clean review screen.
+It turns product photos into a complete seller workflow: capture photos, generate an AI draft, review and resolve blockers on one screen, then publish fixed-price listings to eBay.
 
 Canonical public links:
 
@@ -35,6 +35,13 @@ AI listings from product photos
 ListingOS helps eBay sellers turn product photos into complete listings without rebuilding every item from scratch.
 
 Take or select photos of one product, choose whether you want to sell faster or maximize profit, and let ListingOS build the draft. The app uses AI and marketplace context to generate a title, category, condition notes, item specifics, description, pricing strategy, and publish-readiness checks.
+
+Shipped flow:
+
+- Capture photos.
+- Draft generation runs in the background while blocking checks are prepared.
+- Review blockers, policy items, and pricing on one screen.
+- Publish a fixed-price eBay listing only after seller review.
 
 What ListingOS does:
 
@@ -68,11 +75,19 @@ ebay,seller,reseller,listing,inventory,ai,photos,marketplace,auction,commerce,sc
 3. AI builds the listing draft.
 4. Review everything on one page.
 5. Fix only what eBay requires.
-6. Publish directly to your store.
+6. Open proof mode for non-mutating review playback.
+7. Publish fixed-price listings to eBay.
 
 ## Demo Hero Copy
 
-ListingOS compresses the eBay seller workflow from product photos to a verified listing draft in under a minute when the item is clear. It is not another dashboard. It is a listing machine: photos in, AI draft out, verify, fix blockers, publish.
+ListingOS compresses the eBay seller workflow from product photos to a verified listing draft in under a minute when the item is clear. It is not another dashboard. It is a listing machine: photos in, AI draft out, review blockers, and publish to eBay.
+
+Landing flow used in launch and demos:
+
+- Capture.
+- AI draft and confidence checks.
+- Review/proof and blocker fix.
+- Publish fixed-price eBay listings.
 
 ## Review Notes Template
 

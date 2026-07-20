@@ -4,9 +4,10 @@ import { Platform } from "react-native";
 type WebPageHeadProps = {
   description?: string;
   title: string;
+  indexable?: boolean;
 };
 
-export function WebPageHead({ description, title }: WebPageHeadProps) {
+export function WebPageHead({ description, indexable = false, title }: WebPageHeadProps) {
   if (Platform.OS !== "web") {
     return null;
   }
@@ -15,7 +16,7 @@ export function WebPageHead({ description, title }: WebPageHeadProps) {
     <Head>
       <title>{title}</title>
       {description ? <meta name="description" content={description} /> : null}
-      <meta name="robots" content="noindex,nofollow" />
+      <meta name="robots" content={indexable ? "index,follow" : "noindex,nofollow"} />
     </Head>
   );
 }

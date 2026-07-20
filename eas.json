@@ -11,7 +11,9 @@
       "environment": "development",
       "env": {
         "EXPO_USE_PRECOMPILED_MODULES": "0",
-        "LISTINGOS_APS_ENVIRONMENT": "development"
+        "LISTINGOS_APS_ENVIRONMENT": "development",
+        "EXPO_PUBLIC_REVENUECAT_MODE": "test",
+        "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY": "REVENUECAT_TEST_PUBLIC_API_KEY"
       },
       "android": {
         "buildType": "apk"
@@ -26,7 +28,9 @@
       "environment": "preview",
       "env": {
         "EXPO_USE_PRECOMPILED_MODULES": "0",
-        "LISTINGOS_APS_ENVIRONMENT": "development"
+        "LISTINGOS_APS_ENVIRONMENT": "development",
+        "EXPO_PUBLIC_REVENUECAT_MODE": "test",
+        "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY": "REVENUECAT_TEST_PUBLIC_API_KEY"
       },
       "android": {
         "buildType": "apk"
@@ -38,7 +42,12 @@
       "environment": "production",
       "env": {
         "EXPO_USE_PRECOMPILED_MODULES": "0",
-        "LISTINGOS_APS_ENVIRONMENT": "production"
+        "LISTINGOS_APS_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_REVENUECAT_PROD_API_KEY": "REVENUECAT_PROD_PUBLIC_API_KEY",
+        "EXPO_PUBLIC_REVENUECAT_MODE": "production",
+        "EXPO_PUBLIC_REVENUECAT_IOS_API_KEY": "appl_your_ios_production_public_sdk_key",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY": "goog_your_android_production_public_sdk_key",
+        "EXPO_PUBLIC_REVENUECAT_OFFERING_ID": "default"
       },
       "android": {
         "buildType": "app-bundle"
