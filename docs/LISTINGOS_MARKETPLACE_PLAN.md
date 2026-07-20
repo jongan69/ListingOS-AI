@@ -485,7 +485,7 @@ Also apply the new migration locally before remote deployment, verify Worker hea
 
 ## Demo Story
 
-Target a 2:30 to 2:45 final video.
+Target a 2:40 to 2:55 final video, per `ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md`.
 
 1. **Problem, 10 seconds:** New sellers abandon selling because creating listings and choosing channels is too much work.
 2. **Capture, 20 seconds:** Photograph an item once.

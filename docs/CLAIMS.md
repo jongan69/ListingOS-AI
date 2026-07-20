@@ -2,6 +2,8 @@
 
 This ledger is the truth source for README, Devpost, demo narration, and store copy. Claims are intentionally narrower than the roadmap.
 
+Everything here is **present tense**. Forward-looking statements live in [`ROADMAP.md`](ROADMAP.md) and must stay in future tense, clearly labelled, and out of any elevator pitch or product description.
+
 | Public claim | Evidence | Confidence | Safe to publish? | Required wording |
 | --- | --- | --- | --- | --- |
 | ListingOS is an Expo React Native mobile app | `package.json`, `app.json`, Expo Router routes under `src/app` | High | Yes | Built with Expo SDK 57, React Native, and Expo Router. |
@@ -20,6 +22,13 @@ This ledger is the truth source for README, Devpost, demo narration, and store c
 | RevenueCat subscriptions are live | SDK integration, backend usage metering, entitlement sync routes, webhook validation, and enforcement exist; production store products are not finalized | High | No as a launch claim | RevenueCat-backed metering is implemented, but production subscription products remain launch work. |
 | Auction publishing is supported | Shared contracts include auction mode, but no verified Trading API publish adapter is active | High | No | Fixed-price is the verified MVP; auction publishing is roadmap work. |
 | Image enhancement is automatic | AI returns an enhancement plan, but transformed variants are not generated | High | No | AI recommends honest image improvements; automated transforms are roadmap work. |
+| Local asking-price signals from OfferUp | `worker/index.ts` queries `offerup.com/search` and resolves item detail URLs; surfaced as supplementary seller context in `src/screens/draft-detail-screen.tsx` | High | Yes, qualified | Shows local asking-price signals for extra context. These are asking prices, not sold data, and do not affect eBay publish safety. |
+| Capture quality is scored on device | `src/shared/contracts.ts` defines `qualityScore`, `blurScore`, and `exposureScore`; capture surface computes them | High | Yes, qualified | Scores blur, exposure, and detail at capture time as guidance. Quality scores never block the listing pipeline. |
+| Deterministic listing-strength audit | `src/lib/listing-opportunity.ts` computes the opportunity audit rendered on the review screen | High | Yes | A deterministic opportunity audit scores listing strength on the review page. It is rule-based, not model output. |
+| Sony monitor-mode import | `CaptureSourceSchema` includes `sony_monitor`; the app auto-imports camera-roll photos, sets device model and `monitor_plus_v1` profile, and opens a capture session persisted in `camera_capture_sessions` (migration `0004`) | High | Yes, qualified | Imports photos shot on a Sony body and keeps them grouped as one capture session. This is import, not camera control. |
+| Sony remote camera control | `sony_remote` exists in the capture-source enum with a `sony_remote_v1` profile, but the app returns "Remote camera control is not enabled yet" | High | No | Tethered Sony control is roadmap work. Do not imply the app operates the camera. |
+| On-device vision object detection | `src/lib/vision/yolox.ts` exists and the Worker accepts a vision context, but the YOLOX runtime is **not linked into the Android release build** (JSI/native startup and alignment risk); the web build throws by design | High | No | Do not claim on-device object detection. On-device work in the release build is photo-quality scoring only. |
+| On-device hints are advisory | Worker prompt states on-device observations are probabilistic hints only and must be cross-checked against marketplace and catalog evidence | High | Yes | On-device observations are hints; identity, condition, and pricing evidence still come from validated model output intersected with marketplace data. |
 | Listings reach review in under one minute | Prior device runs reached a usable draft in roughly 40 seconds, but latency varies with network and providers | Medium | Only as demo evidence | In the recorded run, the draft reached review in under one minute. Do not promise a universal SLA. |
 
 ## Verification Snapshot

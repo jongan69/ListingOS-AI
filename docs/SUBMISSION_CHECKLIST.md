@@ -25,8 +25,9 @@ Use this file as the final polish gate before pushing ListingOS through Devpost,
 
 ## 3. Demo Package
 
-- Demo narration matches [`docs/DEMO_SCRIPT.md`](DEMO_SCRIPT.md).
-- Screen capture plan matches [`docs/DEMO_RECORDING.md`](DEMO_RECORDING.md).
+- Demo narration matches [`ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md`](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md).
+- Shot list and beat map match [`ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md).
+- Device capture follows [`docs/DEMO_RECORDING.md`](DEMO_RECORDING.md).
 - Marketplace execution and team ownership are documented in [`docs/LISTINGOS_MARKETPLACE_PLAN.md`](LISTINGOS_MARKETPLACE_PLAN.md).
 - Working files live under [`ListingOS-Hackathon-Demo-Assets`](../ListingOS-Hackathon-Demo-Assets).
 - Final gallery assets include:

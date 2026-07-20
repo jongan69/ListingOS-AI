@@ -4,7 +4,9 @@ Purpose: a single self-contained prompt for generating the OpenAI Build Week dem
 
 How to use: paste everything between the `PROMPT START` and `PROMPT END` markers into a fresh model session. The fact pack is embedded inside the prompt on purpose — do not strip it, because it is the only thing preventing a generated script from inventing features ListingOS does not ship.
 
-Companion docs: [Submission claims](CLAIMS.md), [Devpost submission pack](DEVPOST_SUBMISSION.md), [Demo recording script](DEMO_SCRIPT.md), [Demo recording checklist](DEMO_RECORDING.md), [Monetization plan](MONETIZATION.md).
+Companion docs: [Submission claims](CLAIMS.md), [Devpost submission pack](DEVPOST_SUBMISSION.md), [Demo recording checklist](DEMO_RECORDING.md), [Monetization plan](MONETIZATION.md).
+
+**Output of this prompt:** [`ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md`](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md) is the script this prompt produced, and it is the canonical script. Re-run this prompt only if the script needs regenerating from scratch; otherwise edit the script directly and keep [`PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md) in sync.
 
 ---
 

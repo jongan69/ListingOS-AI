@@ -1,3 +1,7 @@
+> **SUPERSEDED — the 2:15–2:45 script and 10-shot list were replaced by `DEMO_VIDEO_SCRIPT_V2.md` (2:40–2:55, founder's real voice).**
+> Not a current plan. See [`PRODUCTION_PLAN.md`](../../PRODUCTION_PLAN.md) and [`../README.md`](../README.md).
+> Moved here from `docs/DEMO_SCRIPT.md`. The adb capture commands survived into `docs/DEMO_RECORDING.md`.
+
 # Demo Recording Script
 
 Target length: 2:15 to 2:45. Devpost requires a public YouTube video under 3 minutes with audio that explains what was built, how Codex was used, and how GPT-5.6 was used.

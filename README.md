@@ -37,6 +37,7 @@ The MVP supports:
 - direct fixed-price publishing through the eBay Inventory API
 - publicly reachable listing photos served from R2 through the Worker
 - native capture quality checks for blur, exposure, and visual detail that never block the listing pipeline
+- Sony monitor-mode import that auto-imports photos shot on a Sony body and keeps them grouped as one capture session
 - judge-safe proof mode with fixture-backed published, trust-gated card, and blocker-repair examples that do not require seller OAuth or a live eBay mutation
 
 The following are not complete production capabilities yet:
@@ -46,14 +47,18 @@ The following are not complete production capabilities yet:
 - AI produces an image enhancement plan, but the app does not currently generate transformed image variants.
 - Photo transfer continues while the app process remains alive. Uploads do not yet resume after the OS terminates the app.
 - Full automated marketplace E2E coverage is still being added. Current gates are strict lint/type checks, Expo Doctor, Worker dry-run, web export, and physical-device testing.
+- Publishing targets eBay only. A first-party ListingOS Market channel and additional destinations are planned, not built.
+- Sony support is import-only. Tethered remote camera control is present in the capture-source contract but explicitly not enabled.
+- On-device work in the release build is photo-quality scoring. The YOLOX object-detection runtime exists in the tree but is not linked into the Android release.
 
 ## Submission Readiness
 
 The repo is organized to support three external surfaces cleanly:
 
-- Devpost and demo narrative: [docs/DEVPOST_SUBMISSION.md](docs/DEVPOST_SUBMISSION.md), [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md), and the [local demo workbench](ListingOS-Hackathon-Demo-Assets/README.md)
+- Devpost and demo narrative: [docs/DEVPOST_SUBMISSION.md](docs/DEVPOST_SUBMISSION.md) and the [demo workbench](ListingOS-Hackathon-Demo-Assets/README.md)
 - App-store copy and review prep: [docs/APP_STORE_COPY.md](docs/APP_STORE_COPY.md), [docs/PRIVACY.md](docs/PRIVACY.md), and [docs/SUPPORT.md](docs/SUPPORT.md)
 - Truth source for public claims: [docs/CLAIMS.md](docs/CLAIMS.md)
+- Forward-looking plans, kept out of present-tense copy: [docs/ROADMAP.md](docs/ROADMAP.md)
 
 When in doubt, keep public language as narrow as the evidence in `docs/CLAIMS.md`.
 

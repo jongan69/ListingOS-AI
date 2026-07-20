@@ -31,10 +31,13 @@ This is the source-of-truth map for the public `ListingOS-AI` repository. Start 
 ## Hackathon And Demo
 
 - [Build Week audit](BUILD_WEEK_AUDIT.md) - submission scorecard and external readiness gates.
-- [Claims ledger](CLAIMS.md) - evidence-backed wording for demos, judges, and public copy.
+- [Claims ledger](CLAIMS.md) - evidence-backed wording for demos, judges, and public copy. Present tense only.
+- [Roadmap](ROADMAP.md) - multi-marketplace, camera, and on-device AI plans. The only doc that speaks in future tense.
 - [Devpost submission](DEVPOST_SUBMISSION.md) - canonical submission copy and form content.
 - [Submission checklist](SUBMISSION_CHECKLIST.md) - final technical, video, and administrative gates.
-- [Demo script](DEMO_SCRIPT.md) - under-three-minute judge narrative.
-- [Demo recording](DEMO_RECORDING.md) - capture, privacy, voiceover, and visibility checks.
+- [Demo production plan](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md) - **canonical.** Two-track model, beat map, blockers, shot list.
+- [Demo video script](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md) - **canonical.** Narration, on-screen text, compliance self-check.
+- [Demo script generator](DEMO_VIDEO_SCRIPT_PROMPT.md) - the prompt and fact pack that produced the script above.
+- [Demo recording](DEMO_RECORDING.md) - device capture mechanics, privacy gate, upload.
 - [Web production audit](WEB_PRODUCTION_AUDIT_2026-07-19.md) - dated web/Worker findings and release gates.
 - [Demo workbench](../ListingOS-Hackathon-Demo-Assets/README.md) - reproducible source assets and local-only media outputs.

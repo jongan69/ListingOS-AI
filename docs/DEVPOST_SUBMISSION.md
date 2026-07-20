@@ -4,8 +4,10 @@ This file is the source copy for the OpenAI Build Week submission. Do not paste 
 
 Canonical companion docs:
 
-- Claim ledger: [`docs/CLAIMS.md`](CLAIMS.md)
-- Demo script: [`docs/DEMO_SCRIPT.md`](DEMO_SCRIPT.md)
+- Claim ledger (present tense, binding): [`docs/CLAIMS.md`](CLAIMS.md)
+- Roadmap (future tense only): [`docs/ROADMAP.md`](ROADMAP.md)
+- Demo video script: [`ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md`](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md)
+- Demo production plan: [`ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md)
 - Demo recording checklist: [`docs/DEMO_RECORDING.md`](DEMO_RECORDING.md)
 - App-store copy: [`docs/APP_STORE_COPY.md`](APP_STORE_COPY.md)
 - Final ship checklist: [`docs/SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md)
@@ -21,8 +23,15 @@ ListingOS
 Elevator pitch, under 200 characters:
 
 ```text
-Photos in. Listing out. ListingOS is the AI seller agent that uses GPT-5.6 to turn product photos into price-aware, eBay-verified drafts and publish them from one clean review screen.
+Photos in. Listing out. ListingOS is the AI seller agent that uses GPT-5.6 to turn product photos into price-aware, evidence-backed drafts and publish them to eBay from one review screen.
 ```
+
+> **Action required — the live Devpost pitch does not match this and overclaims.** As of
+> 2026-07-19 the submitted tagline reads "...publish them to **online marketplaces** from one
+> review screen." ListingOS publishes to eBay only; multi-destination publishing is roadmap
+> work in [`ROADMAP.md`](ROADMAP.md) §1. Replace the live value with the text above (187
+> characters, within the 200 limit). The ambition belongs in "What's next" below, where it
+> reads as a plan instead of a false present-tense claim.
 
 Recommended category:
 
@@ -59,6 +68,8 @@ For each product, ListingOS generates a search-ready title, buyer-ready descript
 
 For graded trading cards, ListingOS uses a stricter pipeline: card OCR, PSA cert verification, Pokémon catalog lookup, eBay image-search candidates, exact-match filtering, and confidence gates that lock pricing instead of guessing when evidence is weak.
 
+Capture is not limited to the phone camera. Photos shot on a Sony body can be auto-imported and kept together as one tracked capture session, and every photo is scored on device for blur, exposure, and detail — advisory signals that guide the seller without ever blocking the pipeline.
+
 For judging, ListingOS also includes a proof mode on the Home screen with fixture-backed examples for a published general item, a trust-gated graded card, and a blocker-repair flow. It is intentionally non-mutating so judges can inspect the product without needing seller OAuth or risking a live listing.
 
 ## How we built it
@@ -83,7 +94,15 @@ The key product lesson is that sellers do not need another dashboard. They need 
 
 ## What's next
 
-Next steps are finalizing the production RevenueCat catalog, sold-comps-based pricing, true time-to-sale calibration, background upload resume after OS termination, buyer-honest image enhancement variants, auction publishing through a Trading API adapter, and vertical playbooks for cards, sneakers, apparel, electronics, cameras, and collectibles.
+ListingOS today is an eBay seller tool. The next phase turns it into a channel-agnostic listing layer.
+
+**More places to sell.** A first-party ListingOS Market channel, so a seller reviews an item once and publishes it to ListingOS, eBay, or both from the same draft — with a public listing feed, shareable detail pages, and a text-only buyer inquiry flow. Additional destinations follow behind the same channel-adapter interface, and auction publishing arrives through a Trading API adapter. The defensible layer is not the feed; it is the shared listing intelligence, evidence, media, and safety pipeline underneath it that makes one reviewed item publishable to more than one place.
+
+**Better cameras.** Sony capture today is import-only: photos shot on a Sony body are auto-imported and kept together as one capture session. Next is tethered control — triggering the shutter and reading camera settings from the app — so a seller can run a full multi-item capture session without touching the camera. The capture-source abstraction and capture-session schema are already in place for it.
+
+**More intelligence on the phone.** On-device work today is photo-quality scoring: blur, exposure, and detail, used as advisory signals. Next is real on-device inference during capture via VisionCamera and React Native ExecuTorch, behind a feature flag and a native-compatibility gate. That enables pre-filtering — catching retries, duplicates, and unusable frames before upload — which cuts both latency and cost per listing.
+
+**Also planned:** sold-comps pricing and time-to-sale calibration, background upload resume after OS termination, buyer-honest image enhancement variants, the production RevenueCat catalog, and vertical playbooks for cards, sneakers, apparel, electronics, cameras, and collectibles.
 ```
 
 ## Required Custom Fields
@@ -142,8 +161,16 @@ Not applicable. ListingOS is a mobile seller app, not a plugin or developer tool
 
 ## Devpost Progress
 
+**Status as of 2026-07-19: submission started, not finalized. Deadline 2026-07-21, 5:00 PM Pacific — roughly two days out.**
+
+A submission record exists in the Build Week console at
+`devpost.com/submit-to/30223-openai-build-week/manage/submissions/1090292-listingos/`.
+Note two distinct identifiers: `1338448` is the Devpost *software project*; `1090292` is
+the *Build Week submission record*. They are not the same thing and both are valid.
+
+Saved and verified:
+
 - Canonical launch identity is `ListingOS`.
-- Devpost project is published as project `1338448`; OpenAI Build Week submission is still pending the required public demo video.
 - Project title and final tagline are saved.
 - Verified project story, built-with tags, production web URL, and public GitHub URL are saved.
 - Submitter type, country, category, public repo, judge instructions, feedback session ID, and non-plugin status are saved.
@@ -165,7 +192,12 @@ Not applicable. ListingOS is a mobile seller app, not a plugin or developer tool
 | Feedback session | `019f6944-d662-7d11-8a6d-5ecc9906c817` |
 | Plugin/developer-tool instructions | Not applicable |
 
-The project is published at `https://devpost.com/software/listingos`, but it is not yet submitted to OpenAI Build Week. The submission window closes July 21, 2026 at 5:00 PM Pacific Time. The continuous Android source recording is available locally at `ListingOS-Hackathon-Demo-Assets/raw-screen-recordings/listingos-full-demo-a16.mp4`; it still needs an honest final edit, public upload, and URL before submission.
+The project is published at `https://devpost.com/software/listingos`. The Build Week
+submission form is started but the final agreement has not been accepted, so the entry is
+**not yet complete**. The window closes July 21, 2026 at 5:00 PM Pacific Time.
+
+The single remaining hard blocker is the demo video. See "Remaining Submission Blockers"
+below and [`ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md).
 
 ## Jonathan Gan Contribution
 
@@ -184,7 +216,12 @@ Jonathan Gan led product direction, seller-workflow design, visual direction, eB
 
 Use real app captures. Crop account-specific identifiers when they are not needed to prove the workflow.
 
-## 60-90 Second Demo Script
+## Written Summary Of The Demo Flow
+
+Not a shooting script. The video script is
+[`ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md`](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md)
+(2:40–2:55). The text below is a prose summary of the same flow, kept here for Devpost
+fields and written copy that need the narrative in one paragraph block.
 
 ```text
 Listing on eBay is still slower than photographing the product. ListingOS changes that.
@@ -229,9 +266,21 @@ Every public technical claim is mapped to code or runtime evidence in [`docs/CLA
 
 ## Remaining Submission Blockers
 
-- Upload `artifacts/devpost/listingos-home-3x2.png` and final mobile flow captures to the Devpost image gallery if they are not already present.
-- Upload a public YouTube demo under three minutes with a human-approved voiceover covering Codex and GPT-5.6. The local continuous QA candidate is `ListingOS-Hackathon-Demo-Assets/final-renders/listingos-devpost-android-continuous-synthetic-v1.mp4`; it uses synthetic macOS narration and must not be presented as Jonathan Gan's voice.
-- Add the YouTube URL to the live Devpost project, then submit it to OpenAI Build Week.
-- Review the Official Rules and Terms and accept the final agreement box during submission.
+Ordered by what gates what. Deadline 2026-07-21, 5:00 PM Pacific.
+
+1. **Produce the demo video.** This is the only hard blocker. No current master render
+   exists — the earlier synthetic-narration candidates were abandoned along with the
+   fully-automated approach. Plan, remaining shot list, and the unresolved publish-footage
+   problem are in
+   [`ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md).
+   Requirements: public, under 3:00, audio covering what was built, how GPT-5.6 was used,
+   and how Codex was used. Narration is the founder's real voice, so no synthetic-voice
+   disclosure is needed.
+2. **Upload to YouTube** as public or unlisted, and verify playback in an incognito window.
+3. **Attach the video URL** to the Devpost project.
+4. **Upload gallery images** — `artifacts/devpost/listingos-home-3x2.png` plus final mobile
+   flow captures, if not already present.
+5. **Accept the Official Rules and Terms** agreement box to finalize. The submission form is
+   started but not complete without this step.
 
 Before final submission, run the repo-level checklist in [`docs/SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md).

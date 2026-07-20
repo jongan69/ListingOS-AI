@@ -1,45 +1,55 @@
 # Demo Recording Checklist
 
-Target: public YouTube video under 3 minutes with audio explaining what was built, how Codex was used, and how GPT-5.6 was used.
+Device-capture mechanics for the demo video. **Story, shot list, and narration are not
+here** — they live in the demo workbench:
 
-## Recommended Story
+- Script: [`ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md`](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md)
+- Production plan and shot list: [`ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md)
 
-1. Open the standalone `ListingOS` app from the phone launcher.
-2. Show the camera-first home screen and brand.
-3. Sign in with eBay or show the connected seller state.
-4. Select product photos.
-5. Show the background queue while AI builds the listing.
-6. Open the review page.
-7. Show AI-generated title, price strategy, category, condition, specifics, and description.
-8. Show inline blocker handling or readiness state.
-9. Show verify-before-publish.
-10. Show the published listing result or an already-published proof screen.
+This file covers only how to get clean footage off the device.
 
-## Voiceover Points
+## Requirement
 
-- ListingOS turns product photos into a structured eBay listing workflow.
-- GPT-5.6 generates title, description, item specifics, category, condition notes, confidence, and pricing strategy through the OpenAI Responses API.
-- Codex was used to build the Expo app, Cloudflare Worker, eBay OAuth, async uploads, Worker queues, publish flow, UI polish, docs, and Android release validation.
-- The app is not just a mockup: it runs as a native Android release build and talks to deployed Cloudflare/eBay/OpenAI services.
+Public YouTube video under 3:00 with audio explaining what was built, how Codex was used,
+and how GPT-5.6 was used. Current script targets 2:53.
 
-## Recording Options
+## Before recording
 
-From the physical phone:
+- Install the standalone release APK and open it once before capture.
+- Turn on Do Not Disturb. No notification noise in frame.
+- No debug overlays or dev menus.
+- Confirm the eBay seller state you intend to show is already connected.
+- Prepare one product set from [`../ListingOS-Hackathon-Demo-Assets/product-image-sets/`](../ListingOS-Hackathon-Demo-Assets/product-image-sets/).
+- ADB-pushed images require a MediaStore scan before the native picker will see them.
 
-- Use Android's built-in screen recorder for the cleanest demo.
-- Keep the app already installed and opened once before recording.
-- Turn on Do Not Disturb.
-- Use one product with clear photos.
+## Capture
 
-From ADB:
+Phone's built-in screen recorder gives the cleanest result and captures microphone audio.
+
+Via ADB (no microphone audio):
 
 ```sh
+adb devices -l
 adb shell screenrecord --bit-rate 12000000 --time-limit 170 /sdcard/listingos-demo.mp4
-adb pull /sdcard/listingos-demo.mp4 ./dist/devpost/listingos-demo.mp4
+adb pull /sdcard/listingos-demo.mp4 ./ListingOS-Hackathon-Demo-Assets/raw-screen-recordings/
 ```
 
-ADB screen recording does not capture microphone audio. Use the phone recorder if you want direct narration.
+Record narration separately and combine in the edit. `raw-screen-recordings/` is gitignored.
 
-## Final Upload
+## Privacy gate
 
-Upload the final video to YouTube as public or unlisted, then add the URL to Devpost.
+- No API keys, OAuth codes, seller tokens, or `.env` values in frame.
+- Crop or blur account identifiers that are not needed to prove the workflow.
+- Blur any file path containing account identifiers in code montages.
+
+## Publish safety
+
+- Do not create duplicate production eBay listings while recording.
+- If demonstrating publish, use a deliberate test item or an already-published result.
+- See [`PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md) §4 —
+  the publish-footage blocker is unresolved and gates the cold open.
+
+## Upload
+
+Upload to YouTube as public or unlisted, verify playback in an incognito window, then add
+the URL to Devpost. Disclose any time-compression of queue processing in the description.

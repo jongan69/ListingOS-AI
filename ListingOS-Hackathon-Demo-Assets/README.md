@@ -84,6 +84,5 @@ device recordings, the published-listing capture, on-camera footage — is not.
 
 - [`../docs/CLAIMS.md`](../docs/CLAIMS.md) — binding claim boundary
 - [`../docs/DEVPOST_SUBMISSION.md`](../docs/DEVPOST_SUBMISSION.md)
-- [`../docs/DEMO_SCRIPT.md`](../docs/DEMO_SCRIPT.md)
 - [`../docs/DEMO_RECORDING.md`](../docs/DEMO_RECORDING.md)
 - [`../docs/BUILD_WEEK_AUDIT.md`](../docs/BUILD_WEEK_AUDIT.md)
