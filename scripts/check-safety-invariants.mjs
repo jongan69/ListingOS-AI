@@ -12,6 +12,7 @@ function assertInvariant(condition, message) {
 }
 
 const appJson = readJson("app.json");
+const easJson = readJson("eas.json");
 const dynamicAppConfig = read("app.config.js");
 const packageJson = readJson("package.json");
 const cameraPlugin = appJson.expo.plugins.find(
@@ -46,6 +47,8 @@ const notifications = read("src/lib/notifications.ts");
 const notificationNavigation = read("src/hooks/use-notification-navigation.ts");
 const apiClient = read("src/lib/api.ts");
 const appConfigSource = read("src/config/app.ts");
+const revenueCatClient = read("src/lib/revenuecat.ts");
+const nativeReleaseScript = read("scripts/run-native-release.mjs");
 const webProofBuild = read("src/config/proof-mode-build.web.ts");
 const contracts = read("src/shared/contracts.ts");
 const worker = read("worker/index.ts");
@@ -91,6 +94,29 @@ assertInvariant(
   "Web keeps the seller flow live while exposing fixture-backed Proof Mode",
 );
 assertInvariant(/autoPublish\s*:\s*input\.autoPublish\s*===\s*true/.test(apiClient), "API client requires explicit auto-publish opt-in");
+for (const profileName of ["preview", "production", "testflight-demo"]) {
+  const profileEnv = easJson.build?.[profileName]?.env ?? {};
+  assertInvariant(
+    profileEnv.EXPO_PUBLIC_REVENUECAT_MODE === "production"
+      && !profileEnv.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY
+      && !profileEnv.EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE_IN_RELEASE,
+    `${profileName} release profile cannot configure RevenueCat Test Store`,
+  );
+}
+assertInvariant(
+  !easJson.build?.production?.env?.EXPO_PUBLIC_SONY_REMOTE_ENABLED
+    && /childEnv\.EXPO_PUBLIC_SONY_REMOTE_ENABLED = "true"/.test(nativeReleaseScript),
+  "Sony remote stays out of public production while local hardware release builds enable it",
+);
+assertInvariant(
+  !appConfigSource.includes("EXPO_PUBLIC_REVENUECAT_PROD_API_KEY")
+    && !revenueCatClient.includes("EXPO_PUBLIC_REVENUECAT_PROD_API_KEY"),
+  "native clients require platform-specific RevenueCat public keys",
+);
+assertInvariant(
+  /appConfig\.revenueCatMode === "test" && !__DEV__/.test(revenueCatClient),
+  "release bundles stop before configuring RevenueCat Test Store",
+);
 assertInvariant(!/body\.autoPublish\s*!==\s*false/.test(worker), "Worker does not treat omitted auto-publish as consent");
 assertInvariant(/autoPublish\s*=\s*body\.autoPublish\s*===\s*true/.test(worker), "Worker requires explicit auto-publish opt-in");
 assertInvariant(/autoPublish:\s*z\.boolean\(\)\.default\(false\)/.test(contracts), "shared draft-job input defaults to review first");

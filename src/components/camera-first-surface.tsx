@@ -6,6 +6,7 @@ import {
   type FlashMode,
 } from "expo-camera";
 import * as Haptics from "expo-haptics";
+import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { useData } from "@shopify/react-native-skia";
 import { useEffect, useRef, useState } from "react";
@@ -27,11 +28,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { brand } from "@/config/brand";
 import { appConfig } from "@/config/app";
+import { SonyCameraLiveView, useSonyCameraConnection } from "@/lib/camera/sony";
 import { analyzeEncodedImage } from "@/lib/vision/yolox";
 import type { VisionFrameContext } from "@/shared/contracts";
 import { usePalette } from "@/theme/theme";
 
 type Props = {
+  captureSource?: "manual" | "sony_remote";
   connected: boolean;
   queueCount: number;
   productNumber: number;
@@ -51,6 +54,7 @@ type PointFocusCapability = "unknown" | "available" | "unsupported";
 const MAX_PRODUCT_ZOOM = 0.25;
 
 export function CameraFirstSurface({
+  captureSource = "manual",
   connected,
   queueCount,
   productNumber,
@@ -88,7 +92,26 @@ export function CameraFirstSurface({
   const [visionResult, setVisionResult] = useState<VisionFrameContext | null>(null);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [reviewExpanded, setReviewExpanded] = useState(false);
+  const [sonyDiagnosticsExpanded, setSonyDiagnosticsExpanded] = useState(false);
   const compactLayout = windowHeight < 720;
+  const sonyCamera = useSonyCameraConnection(appConfig.sonyRemoteEnabled);
+  const sonyState = sonyCamera.state;
+  const connectSonyCamera = sonyCamera.connect;
+  const sonyActive = captureSource === "sony_remote" && sonyCamera.available;
+  const sonyReady = sonyActive && ["ready", "streaming"].includes(sonyState.state);
+  const captureReady = sonyActive ? sonyReady : cameraReady;
+  const activeCameraError = sonyActive && sonyState.state === "error"
+    ? (sonyState.message ?? "Sony camera connection failed.")
+    : sonyActive ? null : cameraError;
+  const sonyDiagnostics = sonyState.diagnostics ?? [];
+  const showSonyDiagnostics = sonyCamera.available && sonyDiagnostics.length > 0;
+
+  useEffect(() => {
+    if (!sonyActive) return;
+    if (["disconnected", "permission_required"].includes(sonyState.state)) {
+      void connectSonyCamera();
+    }
+  }, [connectSonyCamera, sonyActive, sonyState.state]);
 
   function resetFocusState() {
     focusRequestRef.current += 1;
@@ -108,7 +131,7 @@ export function CameraFirstSurface({
   }, [focusOpacity, focusScale]);
 
   async function capturePhoto() {
-    if (!cameraRef.current || !cameraReady || capturing) return;
+    if ((!sonyActive && (!cameraRef.current || !cameraReady)) || (sonyActive && !sonyReady) || capturing) return;
     if (assets.length >= appConfig.maxPhotosPerSelection) {
       setCameraError(`This product already has the ${appConfig.maxPhotosPerSelection}-photo maximum. Finish it to keep listing.`);
       return;
@@ -116,10 +139,12 @@ export function CameraFirstSurface({
     setCapturing(true);
     setCameraError(null);
     try {
-      const picture = await cameraRef.current.takePictureAsync({
-        quality: 1,
-        skipProcessing: false,
-      });
+      const picture = sonyActive
+        ? await sonyCamera.capturePhoto()
+        : await cameraRef.current!.takePictureAsync({
+            quality: 1,
+            skipProcessing: false,
+          });
       if (!picture?.uri) throw new Error("The camera did not return a photo.");
       const nextAsset: ImagePicker.ImagePickerAsset = {
         uri: picture.uri,
@@ -178,6 +203,11 @@ export function CameraFirstSurface({
   }
 
   function restartCamera() {
+    if (sonyActive) {
+      setCameraError(null);
+      void connectSonyCamera();
+      return;
+    }
     resetFocusState();
     setCameraReady(false);
     setCameraError(null);
@@ -325,8 +355,8 @@ export function CameraFirstSurface({
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
 
-  const captureHint = !cameraReady
-    ? "Starting the camera..."
+  const captureHint = !captureReady
+    ? sonyActive ? (sonyState.message ?? "Connecting to Sony A7 III…") : "Starting the camera..."
     : focusMessage
       ? focusMessage
       : visionResult?.primaryObject
@@ -351,11 +381,11 @@ export function CameraFirstSurface({
             ? "CONTINUOUS FOCUS"
             : "TAP TO FOCUS";
 
-  if (!permission) {
+  if (!sonyActive && !permission) {
     return <View style={styles.permissionShell}><ActivityIndicator color={palette.teal} /></View>;
   }
 
-  if (!permission.granted) {
+  if (!sonyActive && permission?.granted === false) {
     const canRequestPermission = permission.canAskAgain;
     return (
       <View style={[styles.permissionShell, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24 }]}>
@@ -384,6 +414,9 @@ export function CameraFirstSurface({
   return (
     <View style={styles.shell}>
       <View style={styles.previewShell}>
+        {sonyActive ? (
+          <SonyCameraLiveView active style={StyleSheet.absoluteFill} />
+        ) : (
         <CameraView
           autofocus="off"
           enableTorch={torchEnabled}
@@ -404,8 +437,9 @@ export function CameraFirstSurface({
           style={StyleSheet.absoluteFill}
           zoom={zoom}
         />
+        )}
         <View pointerEvents="none" style={styles.vignette} />
-        {Platform.OS !== "web" ? (
+        {Platform.OS !== "web" && !sonyActive ? (
           <Pressable
             accessibilityHint={pointFocusCapability === "unsupported"
               ? "This camera uses continuous autofocus and cannot focus at a selected point"
@@ -431,7 +465,7 @@ export function CameraFirstSurface({
           </View>
         ) : null}
 
-        {visionResult?.primaryObject ? (
+        {!sonyActive && visionResult?.primaryObject ? (
           <View
             pointerEvents="none"
             style={[
@@ -448,7 +482,7 @@ export function CameraFirstSurface({
           </View>
         ) : null}
 
-        {focusPoint ? (
+        {!sonyActive && focusPoint ? (
           <Animated.View
             pointerEvents="none"
             style={[
@@ -497,7 +531,7 @@ export function CameraFirstSurface({
           <View style={styles.cornerBottomRight} />
           <View style={styles.livePill}>
             <View style={styles.liveDot} />
-            <Text style={styles.liveText}>{focusLabel}</Text>
+            <Text style={styles.liveText}>{sonyActive ? "SONY A7 III • USB" : focusLabel}</Text>
           </View>
         </View>
       </View>
@@ -531,6 +565,37 @@ export function CameraFirstSurface({
             </View>
           ) : null}
         </View>
+
+        {showSonyDiagnostics ? (
+          <View style={styles.sonyDiagnosticsShell}>
+            <View style={styles.sonyDiagnosticsHeader}>
+              <Pressable
+                accessibilityLabel={sonyDiagnosticsExpanded ? "Hide Sony USB diagnostics" : "Show Sony USB diagnostics"}
+                accessibilityRole="button"
+                onPress={() => setSonyDiagnosticsExpanded((current) => !current)}
+              >
+                <Text style={styles.sonyDiagnosticsTitle}>
+                  USB DEBUG • {sonyState.state.toUpperCase()} • {sonyDiagnostics.length} EVENTS
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Copy Sony USB diagnostics"
+                accessibilityRole="button"
+                onPress={() => void Clipboard.setStringAsync(sonyDiagnostics.join("\n"))}
+                style={styles.sonyDiagnosticsCopy}
+              >
+                <Text style={styles.sonyDiagnosticsCopyText}>COPY</Text>
+              </Pressable>
+            </View>
+            {sonyDiagnosticsExpanded ? (
+              <ScrollView nestedScrollEnabled style={styles.sonyDiagnosticsLog}>
+                <Text selectable style={styles.sonyDiagnosticsText}>
+                  {sonyDiagnostics.length > 0 ? sonyDiagnostics.slice(-20).join("\n") : "Waiting for native USB events…"}
+                </Text>
+              </ScrollView>
+            ) : null}
+          </View>
+        ) : null}
 
         {reviewExpanded && assets.length > 0 ? (
           <View style={styles.photoRailSlot}>
@@ -585,9 +650,9 @@ export function CameraFirstSurface({
           </View>
         ) : null}
 
-        {cameraError ? (
+        {activeCameraError ? (
           <View accessibilityLiveRegion="assertive" style={styles.cameraErrorPanel}>
-            <Text selectable style={styles.errorText}>{cameraError}</Text>
+            <Text selectable style={styles.errorText}>{activeCameraError}</Text>
             <View style={styles.cameraErrorActions}>
               <Pressable accessibilityLabel="Restart camera" accessibilityRole="button" onPress={restartCamera} style={styles.cameraErrorButton}>
                 <Text style={styles.cameraErrorButtonText}>Restart camera</Text>
@@ -600,6 +665,7 @@ export function CameraFirstSurface({
         ) : null}
 
         <View style={styles.captureSettings}>
+          {!sonyActive ? <>
           <Pressable
             accessibilityLabel={`${gridEnabled ? "Hide" : "Show"} composition grid`}
             accessibilityRole="button"
@@ -618,7 +684,8 @@ export function CameraFirstSurface({
           >
             <Text style={[styles.settingText, torchEnabled ? styles.settingTextActive : null]}>LIGHT</Text>
           </Pressable>
-          <View accessibilityLabel={`Zoom ${Math.round(zoom * 100)} percent`} style={styles.zoomControl}>
+          </> : null}
+          {!sonyActive ? <View accessibilityLabel={`Zoom ${Math.round(zoom * 100)} percent`} style={styles.zoomControl}>
             <Pressable accessibilityLabel="Zoom out" accessibilityRole="button" disabled={zoom === 0} onPress={() => adjustZoom(-0.05)} style={styles.zoomButton}>
               <Text style={styles.zoomButtonText}>−</Text>
             </Pressable>
@@ -626,7 +693,7 @@ export function CameraFirstSurface({
             <Pressable accessibilityLabel="Zoom in" accessibilityRole="button" disabled={zoom >= MAX_PRODUCT_ZOOM} onPress={() => adjustZoom(0.05)} style={styles.zoomButton}>
               <Text style={styles.zoomButtonText}>+</Text>
             </Pressable>
-          </View>
+          </View> : <View style={styles.zoomControl}><Text style={styles.zoomText}>SONY CAMERA CONTROL PTP 2</Text></View>}
         </View>
 
         <View style={styles.controlsRow}>
@@ -639,16 +706,17 @@ export function CameraFirstSurface({
           <Pressable
             accessibilityLabel={assets.length >= appConfig.maxPhotosPerSelection
               ? "Maximum photos captured"
-              : cameraReady ? "Take photo" : "Camera is starting"}
+              : captureReady ? (sonyActive ? "Take photo with Sony A7 III" : "Take photo") : "Camera is starting"}
             accessibilityRole="button"
-            accessibilityState={{ disabled: capturing || !cameraReady || assets.length >= appConfig.maxPhotosPerSelection }}
-            disabled={capturing || !cameraReady || assets.length >= appConfig.maxPhotosPerSelection}
+            accessibilityState={{ disabled: capturing || !captureReady || assets.length >= appConfig.maxPhotosPerSelection }}
+            disabled={capturing || !captureReady || assets.length >= appConfig.maxPhotosPerSelection}
             onPress={() => void capturePhoto()}
-            style={[styles.shutterOuter, !cameraReady || assets.length >= appConfig.maxPhotosPerSelection ? styles.shutterDisabled : null]}
+            style={[styles.shutterOuter, !captureReady || assets.length >= appConfig.maxPhotosPerSelection ? styles.shutterDisabled : null]}
           >
             <View style={styles.shutterInner}>{capturing ? <ActivityIndicator color="#07111B" /> : null}</View>
           </Pressable>
           <View style={[styles.controlsSide, styles.toolCluster]}>
+            {!sonyActive ? <>
             <Pressable accessibilityLabel="Toggle flash" accessibilityRole="button" onPress={cycleFlash} style={styles.toolButton}>
               <Text style={styles.toolGlyph}>{flash === "off" ? "OFF" : flash === "auto" ? "AUTO" : "ON"}</Text>
               <Text style={styles.toolLabel}>Flash</Text>
@@ -657,6 +725,7 @@ export function CameraFirstSurface({
               <Text style={styles.toolGlyph}>FLIP</Text>
               <Text style={styles.toolLabel}>Flip</Text>
             </Pressable>
+            </> : <View style={styles.toolButton}><Text style={styles.toolGlyph}>USB</Text><Text style={styles.toolLabel}>Sony</Text></View>}
           </View>
         </View>
 
@@ -713,6 +782,13 @@ const createStyles = (palette: ReturnType<typeof usePalette>) => StyleSheet.crea
   statusTitle: { color: "#FFFFFF", fontSize: 17, fontWeight: "900", marginTop: 2 },
   statusHint: { color: "rgba(255,255,255,0.6)", fontSize: 11, fontWeight: "700", marginTop: 2 },
   statusActions: { flexDirection: "row", alignItems: "center", gap: 6 },
+  sonyDiagnosticsShell: { marginBottom: 7, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 9, backgroundColor: "rgba(99,222,207,0.08)", borderWidth: 1, borderColor: "rgba(99,222,207,0.22)" },
+  sonyDiagnosticsHeader: { minHeight: 24, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  sonyDiagnosticsTitle: { color: palette.teal, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
+  sonyDiagnosticsCopy: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.09)" },
+  sonyDiagnosticsCopyText: { color: "#FFFFFF", fontSize: 9, fontWeight: "900" },
+  sonyDiagnosticsLog: { maxHeight: 96, marginTop: 5 },
+  sonyDiagnosticsText: { color: "rgba(255,255,255,0.78)", fontSize: 9, lineHeight: 13, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
   latestPreview: { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.12)" },
   reviewButton: { height: 34, paddingHorizontal: 11, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.1)", borderWidth: 1, borderColor: "rgba(255,255,255,0.14)" },
   reviewButtonText: { color: "#FFFFFF", fontSize: 11, fontWeight: "900" },

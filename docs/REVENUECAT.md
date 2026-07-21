@@ -45,7 +45,6 @@ Public SDK keys are safe in client code. The secret key is not.
 | --- | --- |
 | `EXPO_PUBLIC_REVENUECAT_MODE` | `test` or `production`. Selects Test Store vs. platform store keys. |
 | `EXPO_PUBLIC_REVENUECAT_OFFERING_ID` | `default`. |
-| `EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE_IN_RELEASE` | Opts release builds into Test Store. Dev/preview only — never production. |
 | `EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS` | JSON map of hosted checkout URLs. Empty until Stripe is connected. |
 | `REVENUECAT_SECRET_API_KEY` | Worker secret. REST entitlement verification. |
 | `REVENUECAT_WEBHOOK_AUTH_TOKEN` | Worker secret. Validates inbound webhooks. |
@@ -91,10 +90,11 @@ management URL, so the client-supplied one is used instead.
 `src/lib/revenuecat.ts` configures `react-native-purchases`, resolves the platform key,
 validates its prefix, and loads `customerInfo` + offerings.
 
-Test Store keys are rejected in release builds **unless**
-`EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE_IN_RELEASE=true`. Without that opt-in, an
-internal or preview build silently reports "catalog pending" — it is a release build, so
-`__DEV__` is false. This was the long-standing cause of that error.
+Test Store keys are development-bundle only. RevenueCat rejects them in release bundles,
+so preview, TestFlight, Play internal, and production builds all use the platform-specific
+`appl_…` or `goog_…` key. ListingOS stops before SDK configuration if a release bundle is
+misconfigured for Test Store, keeping the rest of the app usable while billing reports
+unavailable.
 
 ### Web
 

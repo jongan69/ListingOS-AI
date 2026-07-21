@@ -67,19 +67,14 @@ function normalizePublicSdkKey(value: string | undefined): string | null {
 export const appConfig = {
   apiBaseUrl: normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL),
   proofModeEnabled: proofModeBuildEnabled,
+  sonyRemoteEnabled: process.env.EXPO_PUBLIC_SONY_REMOTE_ENABLED?.trim() === "true",
   easProjectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() || null,
   revenueCatMode: normalizeRevenueCatMode(process.env.EXPO_PUBLIC_REVENUECAT_MODE),
   revenueCatTestApiKey: normalizePublicSdkKey(process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY),
   revenueCatIosApiKey: normalizePublicSdkKey(process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY),
   revenueCatAndroidApiKey: normalizePublicSdkKey(process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY),
-  revenueCatProdApiKey: normalizePublicSdkKey(process.env.EXPO_PUBLIC_REVENUECAT_PROD_API_KEY),
   revenueCatWebApiKey: normalizePublicSdkKey(process.env.EXPO_PUBLIC_REVENUECAT_WEB_API_KEY),
   revenueCatOfferingId: process.env.EXPO_PUBLIC_REVENUECAT_OFFERING_ID?.trim() || "default",
-  // Test Store keys normally only run in __DEV__. Internal/preview builds used for
-  // demos are release builds, so this flag opts them in explicitly. Never set it
-  // on the production profile.
-  revenueCatAllowTestStoreInRelease:
-    process.env.EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE_IN_RELEASE?.trim() === "true",
   revenueCatWebPurchaseLinks: normalizeRevenueCatWebPurchaseLinks(process.env.EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS),
   apiTimeoutMs: 30_000,
   defaultMarketplaceId: "EBAY_US",

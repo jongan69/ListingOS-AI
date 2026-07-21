@@ -43,6 +43,7 @@ import {
   collectPhotosForListing,
   photoImportRecoveryMessage,
 } from "@/lib/camera/capture";
+import { useSonyCameraConnection } from "@/lib/camera/sony";
 import { confirmHaptic, tapHaptic } from "@/lib/haptics";
 import {
   notificationFailureReason,
@@ -181,6 +182,42 @@ function SellerDashboardScreen({ footer }: { footer?: ReactNode }) {
   const lastQueueStatusesRef = useRef(new Map<string, QueueItem["status"]>());
   const [notificationPermissionState, setNotificationPermissionState] = useState<PublishNotificationPermissionState>("not-available");
   const notificationRegistrationAttemptedRef = useRef<string | null>(null);
+  const sonyCamera = useSonyCameraConnection(appConfig.sonyRemoteEnabled);
+  const sonyAutoOpenedDeviceRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const attachedDevice = sonyCamera.state.device;
+    if (!sonyCamera.available || !attachedDevice) return;
+    const deviceKey = `${attachedDevice.vendorId}:${attachedDevice.productId}:${attachedDevice.deviceName}`;
+    if (sonyAutoOpenedDeviceRef.current === deviceKey) return;
+    sonyAutoOpenedDeviceRef.current = deviceKey;
+    setCaptureSource("sony_remote");
+    setCaptureSessionId(null);
+    setCaptureDeviceModel(attachedDevice.model);
+    setCaptureProfile("sony_remote_v1");
+    setCameraFirst(true);
+    showToast({
+      title: "Sony camera attached",
+      message: "Opening the A7 III viewfinder over USB.",
+      tone: "success",
+    });
+  }, [showToast, sonyCamera.available, sonyCamera.state.device]);
+
+  useEffect(() => {
+    if (captureSource !== "sony_remote" || sonyCamera.state.device || sonyCamera.state.state !== "disconnected") return;
+    const fallbackTimer = setTimeout(() => {
+      setCaptureSource("manual");
+      setCaptureSessionId(null);
+      setCaptureDeviceModel(null);
+      setCaptureProfile(null);
+      showToast({
+        title: "Sony camera disconnected",
+        message: "ListingOS switched back to the phone camera.",
+        tone: "info",
+      });
+    }, 0);
+    return () => clearTimeout(fallbackTimer);
+  }, [captureSource, showToast, sonyCamera.state.device, sonyCamera.state.state]);
 
   useEffect(() => {
     void (async () => {
@@ -387,7 +424,7 @@ function SellerDashboardScreen({ footer }: { footer?: ReactNode }) {
       const source = input?.source ?? captureSource;
       const deviceModel = input?.captureDeviceModel ?? captureDeviceModel;
       const profile = input?.captureProfile ?? captureProfile;
-      const resolvedCaptureSessionId = source === "sony_monitor"
+      const resolvedCaptureSessionId = source === "sony_monitor" || source === "sony_remote"
         ? await ensureCaptureSession(source)
         : captureSessionId;
       const assets = [...(input?.assets ?? selectedAssets)];
@@ -812,7 +849,7 @@ function SellerDashboardScreen({ footer }: { footer?: ReactNode }) {
       if (captureSource === "sony_remote") {
         showToast({
           title: "Sony remote mode",
-          message: "Remote camera control is not enabled yet. Use Sony monitor mode or mobile photos.",
+          message: "Use the shutter in the Sony viewfinder. Switch to Sony Monitor or Mobile Photos to import existing images.",
           tone: "info",
         });
       }
@@ -860,22 +897,23 @@ function SellerDashboardScreen({ footer }: { footer?: ReactNode }) {
     }
     uploadMutation.mutate({
       assets,
-      source: "manual",
-      captureProfile: "phone_camera_single_product_v1",
+      source: captureSource === "sony_remote" ? "sony_remote" : "manual",
+      captureDeviceModel: captureSource === "sony_remote" ? (captureDeviceModel ?? "Sony A7 III") : null,
+      captureProfile: captureSource === "sony_remote" ? "sony_remote_v1" : "phone_camera_single_product_v1",
       visionContext,
     });
   }
 
   async function ensureCaptureSession(source: CaptureSource = captureSource) {
-    if (source !== "sony_monitor") return null;
+    if (source !== "sony_monitor" && source !== "sony_remote") return null;
     if (captureSessionId) return captureSessionId;
     const session = await api.startCameraSession(apiContext, {
       source,
       deviceModel: captureDeviceModel ?? "Sony A7 III",
-      profile: captureProfile ?? "monitor_plus_v1",
+      profile: captureProfile ?? (source === "sony_remote" ? "sony_remote_v1" : "monitor_plus_v1"),
       metadata: {
         captureMode: captureModeLabel(source),
-        captureWindowMinutes: 20,
+        ...(source === "sony_monitor" ? { captureWindowMinutes: 20 } : { connection: "usb_ptp2" }),
       },
     });
     setCaptureSessionId(session.sessionId);
@@ -982,6 +1020,7 @@ function SellerDashboardScreen({ footer }: { footer?: ReactNode }) {
     return (
       <View style={styles.screenShell}>
         <CameraFirstSurface
+          captureSource={captureSource === "sony_remote" ? "sony_remote" : "manual"}
           connected={connected}
           onOpenQueue={() => setCameraFirst(false)}
           onProductComplete={handleCameraProductComplete}
@@ -1131,7 +1170,7 @@ function SellerDashboardScreen({ footer }: { footer?: ReactNode }) {
                       void ensureCaptureSession();
                     }}
                   />
-                  <CaptureModePill
+                  {(Platform.OS === "android" || Platform.OS === "ios") && appConfig.sonyRemoteEnabled ? <CaptureModePill
                     label="Sony Remote"
                     selected={captureSource === "sony_remote"}
                     onPress={() => {
@@ -1140,7 +1179,7 @@ function SellerDashboardScreen({ footer }: { footer?: ReactNode }) {
                       setCaptureDeviceModel(null);
                       setCaptureProfile("sony_remote_v1");
                     }}
-                  />
+                  /> : null}
                 </>
               ) : null}
             </View>

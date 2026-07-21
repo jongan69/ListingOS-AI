@@ -17,7 +17,7 @@ type PurchasesPackage = {
 
 type RevenueCatKeyContext = {
   apiKey: string | null;
-  source: "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY" | "EXPO_PUBLIC_REVENUECAT_IOS_API_KEY" | "EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY" | "EXPO_PUBLIC_REVENUECAT_PROD_API_KEY";
+  source: "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY" | "EXPO_PUBLIC_REVENUECAT_IOS_API_KEY" | "EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY";
   expectedPrefix: string;
   platform: "test" | "ios" | "android";
 };
@@ -90,16 +90,9 @@ function resolveRevenueCatApiKey(): RevenueCatKeyContext {
   const platformSource = isIos
     ? "EXPO_PUBLIC_REVENUECAT_IOS_API_KEY"
     : "EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY";
-  const platformApiKey = platformKey || appConfig.revenueCatProdApiKey;
-  const platformApiSource = platformKey
-    ? platformSource
-    : appConfig.revenueCatProdApiKey
-      ? "EXPO_PUBLIC_REVENUECAT_PROD_API_KEY"
-      : platformSource;
-
   return {
-    apiKey: platformApiKey,
-    source: platformApiSource,
+    apiKey: platformKey,
+    source: platformSource,
     expectedPrefix,
     platform,
   };
@@ -163,15 +156,10 @@ export async function configureRevenueCat(appUserId?: string | null): Promise<Re
       true,
     );
   }
-  // Test Store keys are only valid in development builds. Internal/preview builds
-  // are release builds, so they must opt in explicitly via
-  // EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE_IN_RELEASE. A store production build
-  // must use the platform's appl_.../goog_... key.
-  if (
-    appConfig.revenueCatMode === "test"
-    && !__DEV__
-    && !appConfig.revenueCatAllowTestStoreInRelease
-  ) {
+  // RevenueCat's native SDK rejects Test Store keys in non-development bundles.
+  // Stop before importing/configuring the SDK so a misconfigured release remains
+  // usable and reports billing unavailable instead of closing the application.
+  if (appConfig.revenueCatMode === "test" && !__DEV__) {
     return emptyState("RevenueCat Test Store mode is disabled outside development builds.", true);
   }
   if (!configurePromise) {

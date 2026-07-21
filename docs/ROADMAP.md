@@ -79,16 +79,20 @@ only: importing what a real camera already shot.
 - **On-device photo-quality analysis** — blur, exposure, and detail scoring at capture time.
   Advisory only; it never blocks the listing pipeline.
 
-### In the codebase, not enabled
+### In the codebase, hardware validation pending
 
-- **Sony remote mode** (`sony_remote`) — the capture source enum and the `sony_remote_v1`
-  profile exist, and the app surfaces the mode, but selecting it returns
-  "Remote camera control is not enabled yet." There is no shutter or settings control.
+- **Sony remote mode** (`sony_remote`) — Android and iOS preview-gated local native
+  modules implement Camera Control PTP 2 over USB for the A7 III: attach handling,
+  native JPEG live view, ordered shutter control, JPEG transfer, and capture-session
+  metadata. Android uses USB host APIs; iOS uses ImageCaptureCore camera discovery and
+  PTP pass-through. Static checks and native compilation are required before each build; real
+  camera acceptance is still required before this becomes a shipped claim.
 
 ### Next
 
-- **Tethered Sony control** — trigger the shutter and read or set camera settings from the
-  app, so a seller can run a full capture session without touching the camera.
+- **Validate tethered Sony control on hardware** — prove sustained live view, one-tap
+  shutter, JPEG transfer, disconnect recovery, and multi-photo product completion on the
+  A7 III before enabling the production build flag.
 - **Session-aware multi-item capture** — one tethered session producing several separate
   drafts, using capture-session boundaries that the schema already records.
 - **Broader camera support** through the same capture-source abstraction.

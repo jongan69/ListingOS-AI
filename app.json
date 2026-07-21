@@ -79,6 +79,7 @@
       ],
       "expo-secure-store",
       "expo-image",
+      "./modules/sony-camera/app.plugin.js",
       "expo-asset",
       [
         "expo-camera",

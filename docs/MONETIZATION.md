@@ -228,9 +228,9 @@ Implemented:
 RevenueCat project state as of July 20, 2026:
 
 - Project: `ListingOS`
-- Current store configuration: production-first (`EXPO_PUBLIC_REVENUECAT_MODE=production`) with Test Store retained for local and preview test checks.
+- Current store configuration: production-first (`EXPO_PUBLIC_REVENUECAT_MODE=production`) for every release bundle; Test Store is retained only for development bundles.
 - Test Store key is still configured locally through `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` for non-production test-mode debugging.
-- Platform production keys are expected from `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` and `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`; the shared `EXPO_PUBLIC_REVENUECAT_PROD_API_KEY` remains fallback-only.
+- Platform production keys are required from `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` and `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`; there is no shared client fallback.
 - Entitlements created: `starter`, `pro`, `studio`
 - Test Store products currently configured:
   - `listingos_starter_monthly` at `$14.99/mo`
