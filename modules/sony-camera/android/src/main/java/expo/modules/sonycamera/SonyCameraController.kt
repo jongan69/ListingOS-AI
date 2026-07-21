@@ -266,7 +266,7 @@ internal class SonyCameraController(private val context: Context) {
           fail(error)
           break
         }
-        val remaining = 100L - (SystemClock.elapsedRealtime() - startedAt)
+        val remaining = 250L - (SystemClock.elapsedRealtime() - startedAt)
         if (remaining > 0) SystemClock.sleep(remaining)
       }
       if (state == "streaming") updateState("ready", "Sony A7 III is ready.")

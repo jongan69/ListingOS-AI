@@ -217,7 +217,7 @@ final class SonyCameraController: NSObject, ICDeviceBrowserDelegate, ICCameraDev
         if let jpeg = try transport.getLiveViewJpeg(), !jpeg.isEmpty {
           notify { $0.sonyCameraController(self, didReceiveFrame: jpeg) }
         }
-        let remainder = 0.067 - Date().timeIntervalSince(started)
+        let remainder = 0.25 - Date().timeIntervalSince(started)
         if remainder > 0 { Thread.sleep(forTimeInterval: remainder) }
       }
       if currentState() == "streaming" { _ = updateState("ready", "Sony A7 III is ready.") }

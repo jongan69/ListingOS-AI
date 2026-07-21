@@ -145,6 +145,10 @@ internal class SonyPtpTransport private constructor(
       acceptedResponses = setOf(RESPONSE_OK, RESPONSE_INVALID_HANDLE, RESPONSE_DEVICE_BUSY),
     )
     if (info.responseCode != RESPONSE_OK) return null
+    val attempt = liveViewTransactions + 1
+    if (attempt <= 10) {
+      trace("live-view cycle=$attempt objectBytes=${info.data?.getOrNull(8)?.let { info.data.u32(8) } ?: "unknown"}")
+    }
     val result = execute(
       0x1009,
       intArrayOf(HANDLE_LIVE_VIEW),
@@ -152,7 +156,11 @@ internal class SonyPtpTransport private constructor(
       acceptedResponses = setOf(RESPONSE_OK, RESPONSE_ACCESS_DENIED),
     )
     if (result.responseCode == RESPONSE_ACCESS_DENIED) return null
-    return result.data?.let(SonyPtpCodec::parseSonyJpegData)
+    val jpeg = result.data?.let(SonyPtpCodec::parseSonyJpegData)
+    if (liveViewTransactions <= 10) {
+      trace("live-view cycle=$liveViewTransactions payloadBytes=${result.data?.size ?: 0} jpegBytes=${jpeg?.size ?: 0}")
+    }
+    return jpeg
   }
 
   fun captureStill() {
@@ -208,7 +216,7 @@ internal class SonyPtpTransport private constructor(
     val id = if (operation == 0x1002) 0 else transaction.incrementAndGet()
     val isLiveView = operation == 0x1009 && params.firstOrNull() == HANDLE_LIVE_VIEW
     if (isLiveView) liveViewTransactions += 1
-    val shouldTrace = !isLiveView || liveViewTransactions == 1 || liveViewTransactions % 30 == 0
+    val shouldTrace = !isLiveView || liveViewTransactions <= 10 || liveViewTransactions % 30 == 0
     if (shouldTrace) trace("PTP send op=${operation.hex()} tx=$id params=${params.joinToString { it.hex32() }}")
     writeContainer(CONTAINER_COMMAND, operation, id, params.toPayload())
     if (outgoingData != null) writeContainer(CONTAINER_DATA, operation, id, outgoingData)
@@ -265,6 +273,7 @@ internal class SonyPtpTransport private constructor(
   private fun readExact(size: Int): ByteArray {
     val output = ByteArray(size)
     var offset = 0
+    var consecutiveReadFailures = 0
     while (offset < size) {
       val bufferedBytes = bufferedInput.size - bufferedInputOffset
       if (bufferedBytes > 0) {
@@ -288,7 +297,30 @@ internal class SonyPtpTransport private constructor(
       )
       val chunk = ByteArray(requestSize)
       val read = connection.bulkTransfer(bulkIn, chunk, 0, chunk.size, USB_TIMEOUT_MS)
-      if (read <= 0) throw SonyPtpException("USB read from Sony camera timed out.", retryable = true)
+      if (read == 0) {
+        // A PTP data container whose USB transfer is an exact multiple of the
+        // 512-byte max packet is terminated by a valid zero-length packet.
+        // Consume it and continue reading the response container; clearing the
+        // endpoint here discards Sony's following response and freezes live view.
+        trace("USB bulk-IN zero-length packet requested=${chunk.size} remaining=${size - offset}")
+        continue
+      }
+      if (read < 0) {
+        consecutiveReadFailures += 1
+        trace(
+          "USB bulk-IN retry=$consecutiveReadFailures result=$read " +
+            "requested=${chunk.size} remaining=${size - offset}",
+        )
+        clearEndpointHalt(connection, bulkIn, trace)
+        if (consecutiveReadFailures >= 5) {
+          // Once a PTP transaction has been sent, advancing to a new command
+          // after an incomplete read desynchronizes Sony's USB state machine.
+          throw SonyPtpException("USB read from Sony camera could not be recovered.")
+        }
+        SystemClock.sleep(20)
+        continue
+      }
+      consecutiveReadFailures = 0
       bufferedInput = if (read == chunk.size) chunk else chunk.copyOf(read)
       bufferedInputOffset = 0
     }
