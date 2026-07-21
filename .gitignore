@@ -78,3 +78,6 @@ deploy.tar.gz
 
 # Local iOS crash captures
 artifacts/ios-crash-*/
+
+# Android SDK path — machine-specific, must never be committed
+android/local.properties

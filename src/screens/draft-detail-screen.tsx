@@ -9,6 +9,7 @@ import {
   PanResponder,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -27,6 +28,7 @@ import { StrategyControl } from "@/components/strategy-control";
 import { appConfig } from "@/config/app";
 import { brand } from "@/config/brand";
 import { api, pricingStrategyLabel } from "@/lib/api";
+import { buildListingExport, buildListingExportSubject } from "@/lib/listing-export";
 import { buildListingOpportunityAudit, type ListingOpportunityAudit } from "@/lib/listing-opportunity";
 import { getProofScenario } from "@/lib/proof-mode";
 import { watchPublishedDraft } from "@/lib/publish-watch";
@@ -521,10 +523,73 @@ export function DraftDetailScreen() {
     isProofMode,
   }) : null;
   const opportunityAudit = draft ? buildListingOpportunityAudit(draft, effectivePrice) : null;
+  // One-tap copy is the common case — most sellers are pasting straight into
+  // another marketplace's form. expo-clipboard is a native module, so it is
+  // imported lazily and falls back to the share sheet if this build predates
+  // the dependency being added. That keeps an older binary working instead of
+  // crashing on a missing native module.
+  const copyListing = async () => {
+    if (!draft) return;
+    const text = buildListingExport(draft, "markdown");
+    try {
+      // Non-literal specifier on purpose: TypeScript does not statically
+      // resolve it, so this file still compiles when expo-clipboard is not
+      // installed. Remove the indirection once the dependency is permanent.
+      const clipboardModule = "expo-clipboard";
+      const Clipboard = await import(clipboardModule) as {
+        setStringAsync: (value: string) => Promise<boolean>;
+      };
+      await Clipboard.setStringAsync(text);
+      showToast({
+        title: "Listing copied",
+        message: "Paste it into any marketplace, note, or message.",
+        tone: "success",
+      });
+      await api.recordBillingEvent(apiContext, {
+        eventName: "listing_exported",
+        metadata: { draftId: draft.draftId, method: "clipboard" },
+      }).catch(() => undefined);
+    } catch {
+      await shareListing();
+    }
+  };
+
+  // Available on every plan, including free. Sellers who do not use eBay still
+  // get the AI listing work out of the app in a form they can paste anywhere.
+  const shareListing = async () => {
+    if (!draft) return;
+    try {
+      await Share.share({
+        message: buildListingExport(draft, "markdown"),
+        title: buildListingExportSubject(draft),
+      });
+      await api.recordBillingEvent(apiContext, {
+        eventName: "listing_exported",
+        metadata: { draftId: draft.draftId, marketplaceId: draft.marketplaceId },
+      }).catch(() => undefined);
+    } catch {
+      // Share sheet dismissal is not an error worth surfacing.
+    }
+  };
+
   const footer = isProofMode ? (
     <AppButton label="Proof replay • no live changes" onPress={() => {}} disabled />
   ) : (
     <View style={styles.footerStack}>
+      <AppButton
+        label="Copy listing text"
+        accessibilityHint="Copies this listing as Markdown you can paste into any marketplace"
+        onPress={copyListing}
+        tone="secondary"
+        disabled={!draft}
+      />
+      <AppButton
+        label="Share listing text"
+        accessibilityHint="Opens the share sheet with this listing as Markdown"
+        onPress={shareListing}
+        tone="secondary"
+        disabled={!draft}
+      />
       {marketPublishUrl ? (
         <AppButton
           label="Open ListingOS listing"
