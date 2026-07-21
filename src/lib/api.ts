@@ -11,7 +11,9 @@ import {
   BillingSummarySchema,
   BillingSyncRequestSchema,
   MarketFeedPageSchema,
+  MarketInquiryStartSchema,
   MarketMessageSchema,
+  MarketPublishRequestSchema,
   MarketReportRequestSchema,
   MarketThreadSchema,
   PublicMarketListingSchema,
@@ -35,6 +37,7 @@ import {
   type ListingMode,
   type MarketFeedPage,
   type MarketMessage,
+  type MarketPublishRequest,
   type MarketReportRequest,
   type MarketThread,
   type PricingStrategy,
@@ -76,6 +79,7 @@ const LISTING_IMAGE_MAX_EDGE = 2200;
 const LISTING_IMAGE_QUALITY = 0.82;
 const LISTING_IMAGE_MAX_BYTES = 12 * 1024 * 1024;
 const LISTING_IMAGE_TARGET_BYTES = 10 * 1024 * 1024;
+const LISTING_IMAGE_UPLOAD_TIMEOUT_MS = 90_000;
 const LISTING_IMAGE_ATTEMPTS = [
   { maxEdge: LISTING_IMAGE_MAX_EDGE, quality: LISTING_IMAGE_QUALITY },
   { maxEdge: 1800, quality: 0.72 },
@@ -94,6 +98,15 @@ export class ApiError extends Error {
   }
 }
 
+function assertLiveApiAvailable() {
+  if (!appConfig.proofModeEnabled) return;
+  throw new ApiError(
+    "This proof build is fixture-only and cannot contact live ListingOS seller services.",
+    403,
+    false,
+  );
+}
+
 async function requestJson<T>(
   context: ApiContext,
   path: string,
@@ -101,6 +114,7 @@ async function requestJson<T>(
   schema?: { parse: (value: unknown) => T },
   timeoutMs: number = appConfig.apiTimeoutMs,
 ): Promise<T> {
+  assertLiveApiAvailable();
   const headers = new Headers(init?.headers);
   if (context.sessionToken) {
     headers.set("Authorization", `Bearer ${context.sessionToken}`);
@@ -186,7 +200,7 @@ export const api = {
       { parse: (value) => value as { ok: true; user: SessionUser } },
     );
   },
-  logoutEmailSession(context: ApiContext) {
+  logoutSession(context: ApiContext) {
     return requestJson<{ ok: true }>(context, "/api/session/logout", { method: "POST" });
   },
   registerPushToken(context: ApiContext, input: PushTokenRegistration) {
@@ -266,22 +280,55 @@ export const api = {
     }, UploadInitResponseSchema);
   },
   async uploadPreparedAsset(uploadUrl: string, asset: PreparedUploadAsset) {
-    const upload = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": asset.contentType,
-      },
-      body: asset.blob,
-    });
-    if (!upload.ok) {
-      throw new Error("Photo upload failed.");
+    assertLiveApiAvailable();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), LISTING_IMAGE_UPLOAD_TIMEOUT_MS);
+    try {
+      const upload = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": asset.contentType,
+        },
+        body: asset.blob,
+        signal: controller.signal,
+      });
+      if (!upload.ok) {
+        throw new ApiError(
+          upload.status === 413
+            ? "One photo is too large to upload. Choose a smaller copy and try again."
+            : "A photo could not be uploaded. Check your connection and try again.",
+          upload.status,
+          upload.status === 408 || upload.status === 429 || upload.status >= 500,
+        );
+      }
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      const timedOut = error instanceof Error && error.name === "AbortError";
+      throw new ApiError(
+        timedOut
+          ? "A photo upload timed out. Check your connection and try again."
+          : "A photo could not be uploaded. Check your connection and try again.",
+        0,
+        true,
+      );
+    } finally {
+      clearTimeout(timeout);
     }
   },
   queueDraftGeneration(context: ApiContext, input: { batchId: string; pricingStrategy: PricingStrategy; autoPublish?: boolean }) {
     return requestJson<{ ok: true; batchId: string; status: string; autoPublish: boolean }>(
       context,
       "/api/drafts/jobs",
-      { method: "POST", body: JSON.stringify(input) },
+      {
+        method: "POST",
+        body: JSON.stringify({
+          ...input,
+          // Live marketplace mutations must be explicit. Photo intake and
+          // retry paths always stop at review unless a future seller-facing
+          // control deliberately opts in.
+          autoPublish: input.autoPublish === true,
+        }),
+      },
     );
   },
   async uploadAssetsToBatchAndQueue(
@@ -313,7 +360,7 @@ export const api = {
     await this.queueDraftGeneration(context, {
       batchId: input.batchId,
       pricingStrategy: input.pricingStrategy,
-      autoPublish: input.autoPublish ?? true,
+      autoPublish: input.autoPublish === true,
     });
   },
   listBatchJobs(context: ApiContext, batchId: string) {
@@ -370,11 +417,11 @@ export const api = {
   getListingResult(context: ApiContext, draftId: string) {
     return requestJson<PublishResult>(context, `/api/listings/${draftId}`, undefined, PublishResultSchema);
   },
-  publishMarketDraft(context: ApiContext, draftId: string, payload: { destination?: "listingos" | "ebay" | "both" }) {
+  publishMarketDraft(context: ApiContext, draftId: string, payload: MarketPublishRequest) {
     return requestJson<{ ok: true; listingId: string; listingSlug: string; publicUrl: string; status: string }>(
       context,
       `/api/market/listings/${draftId}/publish`,
-      { method: "POST", body: JSON.stringify(payload) },
+      { method: "POST", body: JSON.stringify(MarketPublishRequestSchema.parse(payload)) },
     );
   },
   unpublishMarketListing(context: ApiContext, listingId: string) {
@@ -404,7 +451,11 @@ export const api = {
     return requestJson<MarketFeedPage["items"][number]>(context, `/api/public/market/listings/${encodeURIComponent(slug)}`, undefined, { parse: (value) => PublicMarketListingSchema.parse(value) });
   },
   startMarketInquiry(context: ApiContext, slug: string, input: { email: string; message: string }) {
-    return requestJson<{ ok: true; threadId: string; verified: boolean }>(context, `/api/public/market/listings/${encodeURIComponent(slug)}/inquiries`, { method: "POST", body: JSON.stringify(input) });
+    return requestJson<{ ok: true; threadId: string; verified: boolean }>(
+      context,
+      `/api/public/market/listings/${encodeURIComponent(slug)}/inquiries`,
+      { method: "POST", body: JSON.stringify(MarketInquiryStartSchema.parse(input)) },
+    );
   },
   verifyMarketInquiry(context: ApiContext, inquiryId: string) {
     return requestJson<{ ok: true; threadId: string }>(context, `/api/public/market/inquiries/verify?inquiryId=${encodeURIComponent(inquiryId)}`);
@@ -425,14 +476,15 @@ async function prepareUploadAsset(asset: ImagePickerAsset): Promise<PreparedUplo
   const originalFileName = asset.fileName ?? `${asset.assetId ?? "photo"}.jpg`;
   const originalContentType = asset.mimeType ?? "image/jpeg";
   const originalBlob = await blobFromUri(asset.uri);
+  const resolvedOriginalContentType = supportedUploadImageMime(originalBlob.type || originalContentType);
   const shouldNormalize = originalBlob.size > 1_500_000
     || maxEdge > LISTING_IMAGE_MAX_EDGE
-    || !originalContentType.toLowerCase().includes("jpeg");
+    || resolvedOriginalContentType !== "image/jpeg";
 
   if (!shouldNormalize && originalBlob.size <= LISTING_IMAGE_TARGET_BYTES) {
     return {
       blob: originalBlob,
-      contentType: originalBlob.type || originalContentType,
+      contentType: resolvedOriginalContentType,
       fileName: originalFileName,
       sizeBytes: originalBlob.size,
     };
@@ -455,7 +507,9 @@ async function prepareUploadAsset(asset: ImagePickerAsset): Promise<PreparedUplo
       const blob = await blobFromUri(result.uri);
       const prepared = {
         blob,
-        contentType: blob.type || "image/jpeg",
+        // SaveFormat.JPEG is authoritative even when a platform Blob reports
+        // a legacy alias such as image/jpg or image/pjpeg.
+        contentType: "image/jpeg",
         fileName: normalizedJpegName(originalFileName),
         sizeBytes: blob.size,
       };
@@ -472,10 +526,10 @@ async function prepareUploadAsset(asset: ImagePickerAsset): Promise<PreparedUplo
 
   if (smallestNormalized) return smallestNormalized;
 
-  if (originalBlob.size <= LISTING_IMAGE_MAX_BYTES) {
+  if (originalBlob.size <= LISTING_IMAGE_MAX_BYTES && resolvedOriginalContentType) {
     return {
       blob: originalBlob,
-      contentType: originalBlob.type || originalContentType,
+      contentType: resolvedOriginalContentType,
       fileName: originalFileName,
       sizeBytes: originalBlob.size,
     };
@@ -493,6 +547,15 @@ async function blobFromUri(uri: string) {
 
 function normalizedJpegName(fileName: string) {
   return fileName.replace(/\.[a-z0-9]+$/i, "") + ".jpg";
+}
+
+function supportedUploadImageMime(value: string): PreparedUploadAsset["contentType"] | null {
+  const normalized = value.trim().toLowerCase().split(";", 1)[0];
+  if (normalized === "image/jpg" || normalized === "image/pjpeg") return "image/jpeg";
+  if (["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(normalized)) {
+    return normalized;
+  }
+  return null;
 }
 
 export function pricingStrategyLabel(strategy: PricingStrategy) {

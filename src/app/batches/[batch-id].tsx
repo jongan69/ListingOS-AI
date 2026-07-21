@@ -1,6 +1,8 @@
+import { Redirect } from "expo-router";
 import type { GenerateMetadataFunction } from "expo-router/server";
 
 import { WebPageHead } from "@/components/web-page-head";
+import { appConfig } from "@/config/app";
 import { BatchDetailScreen } from "@/screens/batch-detail-screen";
 
 const TITLE = "Draft Queue | ListingOS";
@@ -13,6 +15,10 @@ export const generateMetadata: GenerateMetadataFunction = () => ({
 });
 
 export default function BatchRoute() {
+  if (appConfig.proofModeEnabled) {
+    return <Redirect href="/" />;
+  }
+
   return (
     <>
       <WebPageHead title={TITLE} description={DESCRIPTION} />

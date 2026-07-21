@@ -12,7 +12,7 @@ This is the source-of-truth map for the public `ListingOS-AI` repository. Start 
 
 ## Product And Engineering
 
-- [Marketplace execution plan](LISTINGOS_MARKETPLACE_PLAN.md) - owned marketplace, messaging, identity, and delivery boundaries.
+- [Marketplace execution plan](LISTINGOS_MARKETPLACE_PLAN.md) - historical/forward-looking owned-marketplace plan; not a shipped-feature ledger.
 - [Engineering execution plan](ENGINEERING_EXECUTION_PLAN.md) - parallel workstreams, contracts, tickets, critical paths, performance gates, and merge order.
 - [API](API.md) - Worker endpoints and mobile/Worker contract guidance.
 - [Market signals](MARKET_SIGNALS.md) - comparable sourcing and pricing policy.
@@ -35,8 +35,9 @@ This is the source-of-truth map for the public `ListingOS-AI` repository. Start 
 - [Roadmap](ROADMAP.md) - multi-marketplace, camera, and on-device AI plans. The only doc that speaks in future tense.
 - [Devpost submission](DEVPOST_SUBMISSION.md) - canonical submission copy and form content.
 - [Submission checklist](SUBMISSION_CHECKLIST.md) - final technical, video, and administrative gates.
-- [Demo production plan](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md) - **canonical.** Two-track model, beat map, blockers, shot list.
-- [Demo video script](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md) - **canonical.** Narration, on-screen text, compliance self-check.
+- [Final video handoff](../ListingOS-Hackathon-Demo-Assets/final-renders/README.md) - intended 2:30 replacement, media QA, checksum, and external upload steps.
+- [Demo workbench](../ListingOS-Hackathon-Demo-Assets/README.md) - current asset status plus links to superseded planning records.
+- [Demo production plan](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md) - superseded pre-publication planning record.
+- [Demo video script](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md) - superseded script record.
 - [Demo script generator](DEMO_VIDEO_SCRIPT_PROMPT.md) - the prompt and fact pack that produced the script above.
 - [Demo recording](DEMO_RECORDING.md) - device capture mechanics, privacy gate, upload.
-- [Demo workbench](../ListingOS-Hackathon-Demo-Assets/README.md) - reproducible source assets and local-only media outputs.

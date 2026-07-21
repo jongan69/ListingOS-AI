@@ -86,8 +86,71 @@ import { useGradients, usePalette } from "@/theme/theme";
 
 type BillingPlanId = "starter" | "pro" | "studio";
 type RevenueCatPurchaseTerm = "monthly" | "annual";
+type UploadMutationInput = {
+  assets?: ImagePicker.ImagePickerAsset[];
+  source?: CaptureSource;
+  captureDeviceModel?: string | null;
+  captureProfile?: string | null;
+  pricingStrategy?: PricingStrategy;
+  visionContext?: VisionFrameContext | null;
+  retryOfBatchId?: string;
+};
+type RetainedFailedUpload = {
+  assets: ImagePicker.ImagePickerAsset[];
+  source: CaptureSource;
+  captureDeviceModel: string | null;
+  captureProfile: string | null;
+  pricingStrategy: PricingStrategy;
+  visionContext: VisionFrameContext | null;
+};
 
 export function DashboardScreen({ footer }: { footer?: ReactNode }) {
+  if (appConfig.proofModeEnabled) {
+    return <ProofDashboardScreen footer={footer} />;
+  }
+
+  return <SellerDashboardScreen footer={footer} />;
+}
+
+function ProofDashboardScreen({ footer }: { footer?: ReactNode }) {
+  const palette = usePalette();
+  const styles = useMemo(() => createStyles(palette), [palette]);
+  const router = useRouter();
+
+  return (
+    <View style={styles.screenShell}>
+      <AppScreen footer={footer}>
+        <View style={styles.identityRow}>
+          <View style={styles.identityLeft}>
+            <Image accessibilityLabel="ListingOS" accessibilityRole="image" contentFit="cover" source={brand.mark} style={styles.identityMark} transition={180} />
+            <View style={styles.identityCopy}>
+              <Text numberOfLines={1} selectable style={styles.identityWordmark}>{brand.name}</Text>
+              <Text numberOfLines={1} selectable style={styles.identityTagline}>{brand.tagline}</Text>
+            </View>
+          </View>
+          <HeaderActions style={styles.identityActions}>
+            <StatusPill label="Non-mutating build" tone="success" />
+            <ThemeToggle />
+          </HeaderActions>
+        </View>
+
+        <SurfaceCard
+          eyebrow="Hackathon proof"
+          title="Explore the review system without a seller account"
+          subtitle="This build mounts fixture-backed proof only. It does not load seller sessions, poll queues, sync billing, register push notifications, or expose live publish controls."
+        >
+          <Text selectable style={styles.bodyText}>
+            Each replay uses the production review interface with local illustrative data. Any stored publish metadata is labeled separately as historical evidence.
+          </Text>
+        </SurfaceCard>
+
+        <ProofModeSection onOpen={(scenarioId) => router.push(`/drafts/${encodeURIComponent(scenarioId)}`)} />
+      </AppScreen>
+    </View>
+  );
+}
+
+function SellerDashboardScreen({ footer }: { footer?: ReactNode }) {
   const palette = usePalette();
   const gradients = useGradients();
   const styles = useMemo(() => createStyles(palette), [palette]);
@@ -109,6 +172,7 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
   const [cameraProductNumber, setCameraProductNumber] = useState(1);
   const [lastBatchId, setLastBatchIdState] = useState<string | null>(null);
   const [optimisticQueueItems, setOptimisticQueueItems] = useState<QueueItem[]>([]);
+  const [failedUploadsByBatch, setFailedUploadsByBatch] = useState<Map<string, RetainedFailedUpload>>(() => new Map());
   const [hiddenQueueBatchIds, setHiddenQueueBatchIdsState] = useState<Set<string>>(() => new Set());
   const [actionSheetItem, setActionSheetItem] = useState<QueueItem | null>(null);
   const [paywallOpen, setPaywallOpen] = useState(false);
@@ -319,30 +383,39 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: async (input?: {
-      assets?: ImagePicker.ImagePickerAsset[];
-      source?: CaptureSource;
-      captureProfile?: string | null;
-      visionContext?: VisionFrameContext | null;
-    }) => {
+    mutationFn: async (input?: UploadMutationInput) => {
       const source = input?.source ?? captureSource;
-      if (source === "sony_monitor") {
-        await ensureCaptureSession();
-      }
+      const deviceModel = input?.captureDeviceModel ?? captureDeviceModel;
+      const profile = input?.captureProfile ?? captureProfile;
+      const resolvedCaptureSessionId = source === "sony_monitor"
+        ? await ensureCaptureSession(source)
+        : captureSessionId;
       const assets = [...(input?.assets ?? selectedAssets)];
-      const strategy = pricingStrategy;
+      if (assets.length === 0) {
+        throw new Error("Choose at least one product photo before starting a listing.");
+      }
+      const strategy = input?.pricingStrategy ?? pricingStrategy;
       const batch = await api.createUploadBatch(apiContext, {
         marketplaceId: appConfig.defaultMarketplaceId,
         pricingStrategy: strategy,
         captureSource: source,
-        captureSessionId,
-        captureDeviceModel,
-        captureProfile: input?.captureProfile ?? captureProfile,
+        captureSessionId: resolvedCaptureSessionId,
+        captureDeviceModel: deviceModel,
+        captureProfile: profile,
       });
       setCaptureSessionId(null);
-      return { assets, batch, strategy, visionContext: input?.visionContext ?? null };
+      return {
+        assets,
+        batch,
+        strategy,
+        source,
+        captureDeviceModel: deviceModel,
+        captureProfile: profile,
+        visionContext: input?.visionContext ?? null,
+        retryOfBatchId: input?.retryOfBatchId ?? null,
+      };
     },
-    onSuccess: ({ assets, batch, strategy, visionContext }) => {
+    onSuccess: ({ assets, batch, strategy, source, captureDeviceModel: deviceModel, captureProfile: profile, visionContext, retryOfBatchId }) => {
       const initialProgress: UploadProgress = {
         batchId: batch.id,
         pricingStrategy: strategy,
@@ -371,15 +444,27 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
       };
       queryClient.setQueryData(uploadProgressKey(batch.id), initialProgress);
       queryClient.setQueryData(["batch-jobs", apiBaseUrl, sessionToken, batch.id], []);
-      setOptimisticQueueItems((current) => [optimisticItem, ...current.filter((item) => item.batchId !== batch.id)].slice(0, 8));
-      setSelectedAssets([]);
+      setOptimisticQueueItems((current) => [
+        optimisticItem,
+        ...current.filter((item) => item.batchId !== batch.id && item.batchId !== retryOfBatchId),
+      ].slice(0, 8));
+      if (retryOfBatchId) {
+        setFailedUploadsByBatch((current) => {
+          const next = new Map(current);
+          next.delete(retryOfBatchId);
+          return next;
+        });
+      }
+      setSelectedAssets((current) => samePhotoSelection(current, assets) ? [] : current);
       setLastBatchIdState(batch.id);
       void setLastBatchId(batch.id);
       void confirmHaptic();
       void api.uploadAssetsToBatchAndQueue(apiContext, {
         batchId: batch.id,
         pricingStrategy: strategy,
-        autoPublish: true,
+        // Every eBay publish must stop at the review screen and require the
+        // seller's explicit action. Photo intake is never publish consent.
+        autoPublish: false,
         assets,
         visionContext,
         onProgress: (completed, total) => {
@@ -421,14 +506,23 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
           queryClient.invalidateQueries({ queryKey: ["queue", apiBaseUrl, sessionToken] }),
         ]);
       }).catch((error) => {
+        setFailedUploadsByBatch((current) => new Map(current).set(batch.id, {
+          assets,
+          source,
+          captureDeviceModel: deviceModel,
+          captureProfile: profile,
+          pricingStrategy: strategy,
+          visionContext,
+        }));
         setOptimisticQueueItems((current) => current.map((item) => item.batchId === batch.id ? {
           ...item,
           status: "failed",
           statusLabel: "Failed",
-          subtitle: "Upload failed. Choose photos again or retry from the queue when available.",
+          subtitle: "Upload stopped. Photos are retained in this app; retry from the queue.",
           progress: 1,
           errorMessage: error instanceof Error ? error.message : "Upload failed. Try again.",
           updatedAt: new Date().toISOString(),
+          canRetry: true,
         } : item));
         queryClient.setQueryData<UploadProgress>(uploadProgressKey(batch.id), {
           batchId: batch.id,
@@ -438,15 +532,45 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
           total: assets.length,
           errorMessage: error instanceof Error ? error.message : "Upload failed. Try again.",
         });
+        showToast({
+          title: "Photo upload stopped",
+          message: "This product is retained in the queue. Your next photo selection was not changed.",
+          tone: "error",
+        });
       });
     },
-    onError: (error) => {
+    onError: (error, input) => {
+      if (input?.retryOfBatchId) {
+        setOptimisticQueueItems((current) => current.map((item) => item.batchId === input.retryOfBatchId ? {
+          ...item,
+          status: "failed",
+          statusLabel: "Retry failed",
+          subtitle: "The retained photos are still safe in this app. Try again when your connection improves.",
+          errorMessage: error instanceof Error ? error.message : "Retry failed. Try again.",
+          canRetry: true,
+          updatedAt: new Date().toISOString(),
+        } : item));
+      }
+      if (input?.assets?.length) {
+        if (!input.retryOfBatchId) {
+          setSelectedAssets(input.assets);
+          setCameraFirst(false);
+        }
+      }
       if (error instanceof Error && "status" in error && error.status === 402) {
         setPaywallOpen(true);
         showToast({
           title: "AI listing limit reached",
           message: error.message,
           tone: "info",
+        });
+        return;
+      }
+      if (input?.retryOfBatchId) {
+        showToast({
+          title: "Retry did not start",
+          message: error instanceof Error ? error.message : "The retained photos are still available in the queue.",
+          tone: "error",
         });
         return;
       }
@@ -597,6 +721,13 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
       setOptimisticQueueItems((current) => current.filter((entry) => entry.batchId !== item.batchId));
       await queryClient.invalidateQueries({ queryKey: ["queue", apiBaseUrl, sessionToken] });
     },
+    onError: (error) => {
+      showToast({
+        title: "Could not cancel that item",
+        message: error instanceof Error ? error.message : "Refresh the queue and try again.",
+        tone: "error",
+      });
+    },
   });
 
   const retryQueueMutation = useMutation({
@@ -605,7 +736,36 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
       setOptimisticQueueItems((current) => current.filter((entry) => entry.batchId !== item.batchId));
       await queryClient.invalidateQueries({ queryKey: ["queue", apiBaseUrl, sessionToken] });
     },
+    onError: (error) => {
+      showToast({
+        title: "Retry did not start",
+        message: error instanceof Error ? error.message : "Refresh the queue and try again.",
+        tone: "error",
+      });
+    },
   });
+
+  function retryQueueItem(item: QueueItem) {
+    const retained = failedUploadsByBatch.get(item.batchId);
+    if (!retained) {
+      retryQueueMutation.mutate(item.id);
+      return;
+    }
+    setOptimisticQueueItems((current) => current.map((entry) => entry.batchId === item.batchId ? {
+      ...entry,
+      status: "uploading",
+      statusLabel: "Restarting",
+      subtitle: "Starting a fresh upload batch from the retained photos.",
+      errorMessage: null,
+      canRetry: false,
+      progress: 0.05,
+      updatedAt: new Date().toISOString(),
+    } : entry));
+    uploadMutation.mutate({
+      ...retained,
+      retryOfBatchId: item.batchId,
+    });
+  }
 
   const testNotificationsMutation = useMutation({
     mutationFn: async () => {
@@ -706,28 +866,49 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
     });
   }
 
-  async function ensureCaptureSession() {
-    if (captureSource !== "sony_monitor" || captureSessionId) return;
+  async function ensureCaptureSession(source: CaptureSource = captureSource) {
+    if (source !== "sony_monitor") return null;
+    if (captureSessionId) return captureSessionId;
     const session = await api.startCameraSession(apiContext, {
-      source: captureSource,
+      source,
       deviceModel: captureDeviceModel ?? "Sony A7 III",
       profile: captureProfile ?? "monitor_plus_v1",
       metadata: {
-        captureMode: captureModeLabel(captureSource),
+        captureMode: captureModeLabel(source),
         captureWindowMinutes: 20,
       },
     });
     setCaptureSessionId(session.sessionId);
     setCaptureDeviceModel(session.deviceModel);
     setCaptureProfile(session.profile);
+    return session.sessionId;
   }
 
   async function signOut() {
-    await clearSessionToken();
-    await signOutRevenueCat();
+    let revocationError: unknown = null;
+    if (sessionToken) {
+      try {
+        await api.logoutSession(apiContext);
+      } catch (error) {
+        revocationError = error;
+      }
+    }
+    await Promise.allSettled([clearSessionToken(), signOutRevenueCat()]);
     queryClient.removeQueries({ queryKey: ["session"] });
     queryClient.removeQueries({ queryKey: ["billing"] });
+    queryClient.removeQueries({ queryKey: ["queue"] });
+    setOptimisticQueueItems([]);
+    setFailedUploadsByBatch(new Map());
+    setRevenueCatState(null);
+    setCaptureSessionId(null);
     setSessionTokenState(null);
+    if (revocationError) {
+      showToast({
+        title: "Signed out on this device",
+        message: "The server session could not be revoked while offline. Reconnect before signing in again if this is a shared device.",
+        tone: "info",
+      });
+    }
   }
 
   function promoteSelectedAsset(index: number) {
@@ -834,6 +1015,11 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
       return next;
     });
     setOptimisticQueueItems((current) => current.filter((item) => !uniqueBatchIds.includes(item.batchId)));
+    setFailedUploadsByBatch((current) => {
+      const next = new Map(current);
+      for (const batchId of uniqueBatchIds) next.delete(batchId);
+      return next;
+    });
     void confirmHaptic();
     showToast({
       title: toastTitle,
@@ -892,6 +1078,10 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
             <ThemeToggle />
           </HeaderActions>
         </View>
+
+        {Platform.OS === "web" ? (
+          <ProofModeSection onOpen={(scenarioId) => router.push(`/drafts/${scenarioId}`)} />
+        ) : null}
 
         <IosHeroClip style={styles.heroClipShell}>
             <HeroBackdrop
@@ -1043,7 +1233,7 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
                 disabled={Boolean(meQuery.isLoading && sessionToken)}
               />
               {heroAsset ? <AppButton label="Replace photos" tone="secondary" onPress={choosePhotos} /> : null}
-              <AppButton label="Open local marketplace" tone="secondary" onPress={() => router.push("/market" as never)} />
+              <AppButton label="Preview ListingOS Market beta" tone="secondary" onPress={() => router.push("/market" as never)} />
               {lastBatchId ? (
                 <AppButton label="Open last listing" tone="secondary" onPress={() => router.push(`/batches/${lastBatchId}`)} />
               ) : null}
@@ -1051,10 +1241,6 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
               </AppGlass>
             </HeroBackdrop>
         </IosHeroClip>
-
-        {appConfig.proofModeEnabled ? (
-          <ProofModeSection onOpen={(scenarioId) => router.push(`/drafts/${scenarioId}`)} />
-        ) : null}
 
         {connected ? (
           <BillingCard
@@ -1124,6 +1310,10 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
                       key={item.id}
                       item={item}
                       onOpen={() => {
+                        if (!item.canOpen) {
+                          setActionSheetItem(item);
+                          return;
+                        }
                         if (item.draftId) {
                           router.push(`/drafts/${item.draftId}`);
                         } else {
@@ -1131,7 +1321,7 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
                         }
                       }}
                       onCancel={() => cancelQueueMutation.mutate(item.id)}
-                      onRetry={() => retryQueueMutation.mutate(item.id)}
+                      onRetry={() => retryQueueItem(item)}
                       onClear={() => hideQueueBatches([item.batchId], "Removed from queue")}
                       onMore={() => setActionSheetItem(item)}
                     />
@@ -1220,7 +1410,7 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
             if (!actionSheetItem) return;
             const item = actionSheetItem;
             setActionSheetItem(null);
-            retryQueueMutation.mutate(item.id);
+            retryQueueItem(item);
           }}
           onClear={() => {
             if (!actionSheetItem) return;
@@ -1595,6 +1785,13 @@ function mergeQueueItems(localItems: QueueItem[], remoteItems: QueueItem[]) {
     ...localItems.filter((item) => !remoteBatchIds.has(item.batchId) || item.status === "uploading"),
     ...remoteItems,
   ].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+}
+
+function samePhotoSelection(
+  left: ImagePicker.ImagePickerAsset[],
+  right: ImagePicker.ImagePickerAsset[],
+) {
+  return left.length === right.length && left.every((asset, index) => asset.uri === right[index]?.uri);
 }
 
 function isQueueItemInactive(item: QueueItem) {

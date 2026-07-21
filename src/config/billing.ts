@@ -22,7 +22,7 @@ export const billingPlans: Record<BillingPlan, {
     annualPrice: "$149.99/yr",
     includedCredits: 75,
     description: "For casual sellers who list a few real items every week.",
-    benefits: ["75 AI listings per month", "Autopublish when confidence is high", "Faster queue concurrency"],
+    benefits: ["75 AI listings per month", "Pricing evidence and blocker guidance", "Faster queue concurrency"],
   },
   pro: {
     title: "Pro",

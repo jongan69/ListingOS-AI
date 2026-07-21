@@ -9,7 +9,7 @@ import { WebPageHead } from "@/components/web-page-head";
 import { usePalette } from "@/theme/theme";
 
 const TITLE = "ListingOS AI Terms";
-const DESCRIPTION = "Core legal terms for AI-assisted listing drafting and manual eBay publishing.";
+const DESCRIPTION = "Core legal terms for AI-assisted listing drafting, reviewed publishing, and the experimental ListingOS Market beta.";
 
 export const generateMetadata: GenerateMetadataFunction = () => ({
   title: TITLE,
@@ -43,6 +43,9 @@ export default function TermsRoute() {
           <Text selectable style={styles.list}>
             • readiness and blocker checks before publishing
           </Text>
+          <Text selectable style={styles.list}>
+            • optional public listing snapshots and verified inquiry recording through the ListingOS Market beta
+          </Text>
 
           <Text selectable style={styles.sectionTitle}>Seller responsibility</Text>
           <Text selectable style={styles.body}>
@@ -62,6 +65,16 @@ export default function TermsRoute() {
           <Text selectable style={styles.body}>
             The shipped flow publishes fixed-price eBay listings only after your review.
             ListingOS does not provide auction publishing in this release.
+          </Text>
+
+          <Text selectable style={styles.sectionTitle}>ListingOS Market beta</Text>
+          <Text selectable style={styles.body}>
+            ListingOS Market is an experimental public listing and inquiry-recording surface.
+            It does not provide checkout, payments, escrow, shipping, identity guarantees, or transaction mediation.
+          </Text>
+          <Text selectable style={styles.body}>
+            Recording an inquiry does not guarantee that it is delivered to, read by, or answered by the seller.
+            Buyers and sellers remain responsible for independently verifying each other, the item, payment terms, pickup or shipping arrangements, and transaction safety.
           </Text>
 
           <Text selectable style={styles.sectionTitle}>No guarantees</Text>

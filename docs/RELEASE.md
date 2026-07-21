@@ -201,14 +201,31 @@ npm run web:verify
 npm run web:serve
 ```
 
-After the local smoke test passes, deploy the existing `dist` artifact to a preview URL first. Promote only the reviewed artifact to production:
+`web:verify` is read-only with respect to hosting. After the local smoke test passes, use
+one explicit deployment command:
 
 ```sh
-npx eas-cli@latest deploy --export-dir dist
-npx eas-cli@latest deploy --prod --export-dir dist
+npm run web:deploy:preview
+npm run web:deploy:production
 ```
 
-The production web build keeps Proof Mode disabled unless `EXPO_PUBLIC_PROOF_MODE=true` is explicitly provided for a dedicated judge/demo deployment. Deploy the Worker CORS allowlist change before or alongside the web release, and verify `/`, a dynamic draft URL, and an unknown route after promotion.
+Do not chain preview and production deployment in one command. A production alias change
+must always be a deliberate action.
+
+The normal production web and every native production build keep Proof Mode disabled. For
+the time-limited judge website only, build and inspect the fixture-backed artifact locally,
+then deploy it with the dedicated command:
+
+```sh
+npm run web:export:proof
+npm run web:serve
+npm run web:deploy:proof
+```
+
+`web:deploy:proof` sets `EXPO_PUBLIC_PROOF_MODE=true` only while exporting the public web
+artifact. Never add that flag to the native production EAS profile. Proof Mode is
+non-mutating, but it is a judge surface rather than a normal seller feature. Verify `/`, a
+Proof Mode draft, and an unknown route in a signed-out browser after deployment.
 
 ## Store Builds
 
@@ -231,7 +248,10 @@ npm run eas:submit:ios
 npm run eas:submit:android
 ```
 
-The Android submit profile targets the Play `internal` track with `releaseStatus: draft` so uploads do not accidentally ship to production.
+The Android submit profile targets the Play `internal` track with
+`releaseStatus: completed`. In EAS Submit/Google Play terms, that completes rollout to the
+**internal test track**; it does not promote the app to production. Confirm the destination
+track in Google Play Console before every submit.
 
 Before store builds, configure push credentials:
 

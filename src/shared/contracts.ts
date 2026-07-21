@@ -3,6 +3,14 @@ import { z } from "zod";
 export const ListingModeSchema = z.enum(["fixed_price", "auction"]);
 export const PricingStrategySchema = z.enum(["fast_sale", "balanced", "max_profit"]);
 export const CaptureSourceSchema = z.enum(["manual", "sony_monitor", "sony_remote"]);
+export const MarketplaceIdSchema = z.string().trim().min(3).max(40).regex(/^EBAY_[A-Z0-9_]+$/);
+export const SupportedUploadContentTypeSchema = z.enum([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
 export const VisionDetectionSchema = z.object({
   label: z.string(),
   confidence: z.number().min(0).max(1),
@@ -88,15 +96,27 @@ export const SessionStateSchema = z.object({
 
 export const MarketListingStateSchema = z.enum(["draft", "active", "sold", "hidden", "archived"]);
 export const MarketMessageSenderSchema = z.enum(["seller", "buyer"]);
-export const PublishDestinationSchema = z.enum(["ebay", "listingos", "both"]);
+export const MarketPublishDestinationSchema = z.literal("listingos");
+export const MarketPublishRequestSchema = z.object({
+  destination: MarketPublishDestinationSchema,
+  selectedStrategy: PricingStrategySchema,
+}).strict();
 
 export const MarketFeedQuerySchema = z.object({
-  q: z.string().optional(),
-  category: z.string().optional(),
+  q: z.string().trim().min(1).max(120).optional(),
+  category: z.string().trim().min(1).max(120).optional(),
   radiusMiles: z.coerce.number().positive().max(250).optional(),
   lat: z.coerce.number().min(-90).max(90).optional(),
   lng: z.coerce.number().min(-180).max(180).optional(),
-  pageCursor: z.string().optional(),
+  pageCursor: z.string().trim().min(1).max(300).optional(),
+}).strict();
+
+// Search coordinates are accepted as request-only inputs. Public responses may
+// expose the calculated distance, but never echo an exact buyer or seller
+// coordinate.
+export const MarketFeedResponseRequestSchema = MarketFeedQuerySchema.omit({
+  lat: true,
+  lng: true,
 });
 
 export const PublicMarketListingSchema = z.object({
@@ -110,8 +130,6 @@ export const PublicMarketListingSchema = z.object({
   price: z.number().min(0),
   currency: z.string().default("USD"),
   locationLabel: z.string().nullable().default(null),
-  latitude: z.number().nullable().default(null),
-  longitude: z.number().nullable().default(null),
   category: z.string().nullable().default(null),
   photoUrls: z.array(z.string()).default([]),
   distanceMiles: z.number().nullable().default(null),
@@ -162,39 +180,42 @@ export const MarketFeedPageSchema = z.object({
   items: z.array(PublicMarketListingSchema),
   nextCursor: z.string().nullable().default(null),
   total: z.number().int().nonnegative().default(0),
-  request: MarketFeedQuerySchema.default({}),
+  request: MarketFeedResponseRequestSchema.default({}),
 });
 
 export const SessionEmailStartSchema = z.object({
-  email: z.string().email(),
-});
+  email: z.string().trim().toLowerCase().email().max(254),
+}).strict();
 
 export const SessionEmailVerifySchema = z.object({
-  sessionToken: z.string().min(10),
-  email: z.string().email(),
-  verificationCode: z.string().length(6),
-});
+  sessionToken: z.string().uuid(),
+  email: z.string().trim().toLowerCase().email().max(254),
+  verificationCode: z.string().regex(/^\d{6}$/),
+}).strict();
 
 export const MarketMessageSchema = z.object({
-  body: z.string().min(1).max(1800),
-  threadId: z.string().optional(),
-});
+  body: z.string().trim().min(1).max(1800),
+  id: z.string().uuid().optional(),
+  threadId: z.string().uuid().optional(),
+  senderType: MarketMessageSenderSchema.optional(),
+  createdAt: z.string().optional(),
+}).strict();
 
 export const MarketInquiryStartSchema = z.object({
-  email: z.string().email(),
-  message: z.string().min(1).max(1200),
-});
+  email: z.string().trim().toLowerCase().email().max(254),
+  message: z.string().trim().min(1).max(1200),
+}).strict();
 
 export const MarketReportRequestSchema = z.object({
-  listingId: z.string(),
-  reason: z.string().max(140),
+  listingId: z.string().uuid(),
+  reason: z.string().trim().min(1).max(140),
   details: z.record(z.string(), z.unknown()).default({}),
   isBlockRequest: z.boolean().optional(),
-});
+}).strict();
 
 export const UploadBatchSchema = z.object({
   id: z.string(),
-  marketplaceId: z.string(),
+  marketplaceId: MarketplaceIdSchema,
   pricingStrategy: PricingStrategySchema,
   captureSource: CaptureSourceSchema.default("manual"),
   captureSessionId: z.string().nullable().default(null),
@@ -205,13 +226,22 @@ export const UploadBatchSchema = z.object({
   updatedAt: z.string(),
 });
 
+export const UploadBatchCreateInputSchema = z.object({
+  marketplaceId: MarketplaceIdSchema.optional(),
+  pricingStrategy: PricingStrategySchema.default("balanced"),
+  captureSource: CaptureSourceSchema.default("manual"),
+  captureSessionId: z.string().uuid().nullable().optional(),
+  captureDeviceModel: z.string().trim().max(120).nullable().optional(),
+  captureProfile: z.string().trim().max(120).nullable().optional(),
+}).strict();
+
 export const CameraSessionCreateInputSchema = z.object({
   source: CaptureSourceSchema,
-  batchId: z.string().nullable().optional(),
-  deviceModel: z.string().nullable().optional(),
-  profile: z.string().nullable().optional(),
+  batchId: z.string().uuid().nullable().optional(),
+  deviceModel: z.string().trim().max(120).nullable().optional(),
+  profile: z.string().trim().max(120).nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).default({}),
-});
+}).strict();
 
 export const CameraSessionSchema = z.object({
   sessionId: z.string(),
@@ -238,6 +268,20 @@ export const UploadInitResponseSchema = z.object({
   uploadUrl: z.string(),
   uploadHeaders: z.record(z.string(), z.string()).default({}),
 });
+
+export const UploadInitInputSchema = z.object({
+  batchId: z.string().uuid(),
+  fileName: z.string().trim().min(1).max(180),
+  contentType: SupportedUploadContentTypeSchema,
+  sizeBytes: z.number().int().positive().max(12 * 1024 * 1024).nullable().optional(),
+  visionContext: VisionFrameContextSchema.nullable().optional(),
+}).strict();
+
+export const DraftJobsCreateInputSchema = z.object({
+  batchId: z.string().uuid(),
+  pricingStrategy: PricingStrategySchema.default("balanced"),
+  autoPublish: z.boolean().default(false),
+}).strict();
 
 export const DraftPhotoSchema = z.object({
   id: z.string(),
@@ -460,19 +504,38 @@ export const QueueItemSchema = z.object({
   canRetry: z.boolean(),
 });
 
+export const DraftPatchInputSchema = z.object({
+  selectedTitle: z.string().trim().min(1).max(80).optional(),
+  description: z.string().trim().min(1).max(100_000).optional(),
+  condition: z.string().trim().min(1).max(120).optional(),
+  conditionNotes: z.string().trim().max(4_000).optional(),
+  listingMode: ListingModeSchema.optional(),
+  category: z.string().trim().min(1).max(240).optional(),
+  itemSpecifics: z.array(z.object({
+    name: z.string().trim().min(1).max(100),
+    value: z.string().trim().min(1).max(500),
+  }).strict()).max(100).optional(),
+  manualPrice: z.number().positive().max(10_000_000).optional(),
+  manualPriceStrategy: PricingStrategySchema.optional(),
+  clearManualPrice: z.boolean().optional(),
+  confirmManualReview: z.boolean().optional(),
+  leadPhotoId: z.string().uuid().nullable().optional(),
+  photoOrderIds: z.array(z.string().uuid()).max(24).optional(),
+}).strict();
+
 export const PublishRequestSchema = z.object({
   strategy: PricingStrategySchema,
-  selectedTitle: z.string().optional(),
+  selectedTitle: z.string().trim().min(1).max(80).optional(),
   listingMode: ListingModeSchema.optional(),
   autoRepairAttempted: z.boolean().optional(),
-  autoRepairNote: z.string().optional(),
-});
+  autoRepairNote: z.string().trim().max(500).optional(),
+}).strict();
 
 export const PushTokenRegistrationSchema = z.object({
-  token: z.string().min(10),
+  token: z.string().trim().min(10).max(512),
   platform: z.enum(["android", "ios", "web", "unknown"]).default("unknown"),
-  deviceName: z.string().nullable().optional(),
-});
+  deviceName: z.string().trim().max(120).nullable().optional(),
+}).strict();
 
 export const BillingPlanSchema = z.enum(["free", "starter", "pro", "studio"]);
 export const BillingEnforcementModeSchema = z.enum(["observe", "enforce"]);
@@ -512,28 +575,28 @@ export const BillingSummarySchema = z.object({
 });
 
 export const BillingSyncRequestSchema = z.object({
-  appUserId: z.string().min(3),
+  appUserId: z.string().trim().min(3).max(200),
   source: BillingSyncSourceSchema.default("revenuecat_sdk"),
-  activeEntitlements: z.array(z.string()).default([]),
+  activeEntitlements: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
   allEntitlements: z.record(z.string(), z.unknown()).default({}),
-  subscriptionStatus: z.string().default("unknown"),
-  managementUrl: z.string().nullable().optional(),
+  subscriptionStatus: z.string().trim().max(100).default("unknown"),
+  managementUrl: z.string().url().max(2048).nullable().optional(),
   customerInfo: z.unknown().optional(),
-});
+}).strict();
 
 export const BillingEventSchema = z.object({
-  eventName: z.string().min(2),
-  trigger: z.string().nullable().optional(),
+  eventName: z.string().trim().min(2).max(100),
+  trigger: z.string().trim().max(100).nullable().optional(),
   plan: BillingPlanSchema.optional(),
-  packageId: z.string().nullable().optional(),
+  packageId: z.string().trim().max(200).nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).default({}),
-});
+}).strict();
 
 export const RevenueCatWebhookTraceQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
-  appUserId: z.string().optional(),
-  eventType: z.string().optional(),
-});
+  appUserId: z.string().trim().max(200).optional(),
+  eventType: z.string().trim().max(100).optional(),
+}).strict();
 
 export const RevenueCatWebhookTraceItemSchema = z.object({
   traceId: z.string(),
@@ -572,14 +635,18 @@ export type ImageVariantType = z.infer<typeof ImageVariantTypeSchema>;
 export type SessionUser = z.infer<typeof SessionUserSchema>;
 export type SessionState = z.infer<typeof SessionStateSchema>;
 export type UploadBatch = z.infer<typeof UploadBatchSchema>;
+export type UploadBatchCreateInput = z.input<typeof UploadBatchCreateInputSchema>;
 export type UploadPhoto = z.infer<typeof UploadPhotoSchema>;
 export type UploadInitResponse = z.infer<typeof UploadInitResponseSchema>;
+export type UploadInitInput = z.input<typeof UploadInitInputSchema>;
+export type DraftJobsCreateInput = z.input<typeof DraftJobsCreateInputSchema>;
 export type DraftPhoto = z.infer<typeof DraftPhotoSchema>;
 export type DraftPayload = z.infer<typeof DraftPayloadSchema>;
 export type ComparableListing = z.infer<typeof ComparableListingSchema>;
 export type ProductIdentity = z.infer<typeof ProductIdentitySchema>;
 export type PricingEvidence = z.infer<typeof PricingEvidenceSchema>;
 export type DraftJob = z.infer<typeof DraftJobSchema>;
+export type DraftPatchInput = z.input<typeof DraftPatchInputSchema>;
 export type SellerReadiness = z.infer<typeof SellerReadinessSchema>;
 export type PublishRequest = z.infer<typeof PublishRequestSchema>;
 export type PublishResult = z.infer<typeof PublishResultSchema>;
@@ -598,6 +665,7 @@ export type RevenueCatWebhookTraceResponse = z.infer<typeof RevenueCatWebhookTra
 export type CameraSessionCreateInput = z.input<typeof CameraSessionCreateInputSchema>;
 export type CameraSession = z.infer<typeof CameraSessionSchema>;
 export type MarketFeedQuery = z.input<typeof MarketFeedQuerySchema>;
+export type MarketPublishRequest = z.input<typeof MarketPublishRequestSchema>;
 export type PublicMarketListing = z.infer<typeof PublicMarketListingSchema>;
 export type MarketFeedPage = z.infer<typeof MarketFeedPageSchema>;
 export type MarketThread = z.infer<typeof MarketThreadSchema>;

@@ -5,12 +5,18 @@ EBAY_CLIENT_SECRET=
 EBAY_DEV_ID=
 EBAY_RUNAME=
 EBAY_MARKETPLACE_ID=EBAY_US
-EBAY_USE_SANDBOX=false
+EBAY_USE_SANDBOX=true
 APP_ENCRYPTION_SECRET=
 PUBLIC_API_BASE_URL=http://127.0.0.1:8787
 PUBLIC_WEB_APP_URL=http://localhost:8081
 REVENUECAT_SECRET_API_KEY=
 REVENUECAT_WEBHOOK_AUTH_TOKEN=
+# Optional defense in depth. Enable HMAC signing in the RevenueCat webhook
+# integration first, then store its one-time signing secret here.
+REVENUECAT_WEBHOOK_SIGNING_SECRET=
+# Optional private code for an explicitly labelled local marketplace demo.
+# Leave unset in production until real email delivery is implemented.
+MARKET_EMAIL_VERIFICATION_DEMO_CODE=
 BILLING_ENFORCEMENT_MODE=observe
 INTERNAL_ANALYTICS_TOKEN=
 AI_UNKNOWN_MODEL_INPUT_USD_PER_MILLION=10

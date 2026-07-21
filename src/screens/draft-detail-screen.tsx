@@ -27,7 +27,7 @@ import { useToast } from "@/components/toast-provider";
 import { StrategyControl } from "@/components/strategy-control";
 import { appConfig } from "@/config/app";
 import { brand } from "@/config/brand";
-import { api, pricingStrategyLabel } from "@/lib/api";
+import { api, ApiError, pricingStrategyLabel } from "@/lib/api";
 import { buildListingExport, buildListingExportSubject } from "@/lib/listing-export";
 import { buildListingOpportunityAudit, type ListingOpportunityAudit } from "@/lib/listing-opportunity";
 import { getProofScenario } from "@/lib/proof-mode";
@@ -78,12 +78,10 @@ export function DraftDetailScreen() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const apiBaseUrl = appConfig.apiBaseUrl;
-  const proofScenario = useMemo(
-    () => (appConfig.proofModeEnabled ? getProofScenario(draftId) : null),
-    [draftId],
-  );
+  const proofScenario = useMemo(() => getProofScenario(draftId), [draftId]);
   const isProofMode = Boolean(proofScenario);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [sessionResolved, setSessionResolved] = useState(isProofMode);
   const [proofDraft, setProofDraft] = useState<DraftPayload | null>(proofScenario?.draft ?? null);
   const [proofListing, setProofListing] = useState<PublishResult | null>(proofScenario?.listing ?? null);
   const [selectedStrategy, setSelectedStrategy] = useState<PricingStrategy>("balanced");
@@ -109,10 +107,22 @@ export function DraftDetailScreen() {
   const lastSavedSignatureRef = useRef("");
 
   useEffect(() => {
-    void (async () => {
-      setSessionToken(await getSessionToken());
-    })();
-  }, []);
+    if (isProofMode) return;
+    let canceled = false;
+    void getSessionToken()
+      .then((token) => {
+        if (!canceled) setSessionToken(token);
+      })
+      .catch(() => {
+        if (!canceled) setSessionToken(null);
+      })
+      .finally(() => {
+        if (!canceled) setSessionResolved(true);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [isProofMode]);
 
   const apiContext = useMemo(() => ({ apiBaseUrl, sessionToken }), [apiBaseUrl, sessionToken]);
   const draftQueryKey = ["draft", apiBaseUrl, sessionToken, draftId] as const;
@@ -139,7 +149,11 @@ export function DraftDetailScreen() {
         || draftQuery.data?.status === "blocked"
       ),
     ),
-    refetchInterval: (query) => query.state.data?.status === "published" ? false : 3_000,
+    refetchInterval: (query) => (
+      query.state.data?.status === "queued" || query.state.data?.status === "publishing"
+        ? 3_000
+        : false
+    ),
     queryFn: () => api.getListingResult(apiContext, draftId!),
   });
 
@@ -428,7 +442,10 @@ export function DraftDetailScreen() {
       }
       const saved = await api.patchDraft(apiContext, draftId!, buildDraftPatch());
       queryClient.setQueryData(draftQueryKey, saved);
-      return api.publishMarketDraft(apiContext, draftId!, { destination: "listingos" });
+      return api.publishMarketDraft(apiContext, draftId!, {
+        destination: "listingos",
+        selectedStrategy,
+      });
     },
     onSuccess: (result) => {
       setMarketPublishUrl(result.publicUrl);
@@ -633,10 +650,36 @@ export function DraftDetailScreen() {
     ]);
   }
 
+  if (isProofMode && !proofScenario) {
+    return (
+      <AppScreen>
+        <ScreenToolbar title={`${brand.shortName} proof`} onBack={() => router.replace("/")} />
+        <SurfaceCard
+          eyebrow="Proof boundary"
+          title="That draft is not part of this proof build"
+          subtitle="Proof Mode opens only the bundled, non-mutating review scenarios. Live seller drafts and unknown IDs are unavailable."
+        >
+          <AppButton label="Return to proof scenarios" onPress={() => router.replace("/")} />
+        </SurfaceCard>
+      </AppScreen>
+    );
+  }
+
   return (
     <AppScreen keyboardAware footer={draft ? footer : undefined} onRefresh={refreshDraft}>
         <ScreenToolbar title={`${brand.shortName} review`} onBack={() => router.back()} />
-        {draftQuery.isError && !isProofMode ? (
+        {!isProofMode && (
+          (sessionResolved && !sessionToken)
+          || (draftQuery.error instanceof ApiError && draftQuery.error.status === 401)
+        ) ? (
+          <SurfaceCard
+            eyebrow="Session required"
+            title="Reconnect to open this draft"
+            subtitle="Your saved listing is still on the server, but this device needs a fresh seller session before it can load or publish it."
+          >
+            <AppButton label="Return home to reconnect" onPress={() => router.replace("/")} />
+          </SurfaceCard>
+        ) : draftQuery.isError && !isProofMode ? (
           <SurfaceCard
             eyebrow="Could not load"
             title="Your draft is still safe"
@@ -728,53 +771,56 @@ export function DraftDetailScreen() {
                 subtitle="Only required eBay fixes are shown here. Each fix is checked automatically."
               >
                 <View style={styles.blockerStack}>
-                  {draft.blockers.map((blocker) => (
-                    <View key={blocker.id} style={styles.blockerCard}>
-                      <View style={styles.blockerHeader}>
-                        <Text selectable style={styles.blockerTitle}>{blocker.title}</Text>
-                        <StatusPill label="Required" tone="danger" />
+                  {draft.blockers.map((blocker) => {
+                    const inputsReady = blockerInputsReady(blocker, blockerValues[blocker.id]);
+                    return (
+                      <View key={blocker.id} style={styles.blockerCard}>
+                        <View style={styles.blockerHeader}>
+                          <Text selectable style={styles.blockerTitle}>{blocker.title}</Text>
+                          <StatusPill label="Required" tone="danger" />
+                        </View>
+                        <Text selectable style={styles.bodyText}>{blocker.description}</Text>
+                        {Array.isArray(blocker.payload.requiredFields) ? blocker.payload.requiredFields.map((field) => {
+                          const fieldKey = String(field);
+                          const fieldLabels = blocker.payload.fieldLabels && typeof blocker.payload.fieldLabels === "object"
+                            ? blocker.payload.fieldLabels as Record<string, unknown>
+                            : {};
+                          const fieldHints = blocker.payload.fieldHints && typeof blocker.payload.fieldHints === "object"
+                            ? blocker.payload.fieldHints as Record<string, unknown>
+                            : {};
+                          const fieldLabel = String(fieldLabels[fieldKey] ?? fieldKey);
+                          const fieldHint = fieldHints[fieldKey] ? String(fieldHints[fieldKey]) : null;
+                          return (
+                            <View key={`${blocker.id}:${fieldKey}`} style={styles.blockerField}>
+                              <Text selectable style={styles.blockerFieldLabel}>{fieldLabel}</Text>
+                              <AppTextInput
+                                value={blockerValues[blocker.id]?.[fieldKey] ?? ""}
+                                onChangeText={(value) => setBlockerValues((current) => ({
+                                  ...current,
+                                  [blocker.id]: {
+                                    ...current[blocker.id],
+                                    [fieldKey]: value,
+                                  },
+                                }))}
+                                placeholder={fieldLabel}
+                                placeholderTextColor={palette.textSoft}
+                                selectionColor={palette.cyan}
+                                style={styles.blockerInput}
+                              />
+                              {fieldHint ? <Text selectable style={styles.blockerFieldHint}>{fieldHint}</Text> : null}
+                            </View>
+                          );
+                        }) : null}
+                        <AppButton
+                          label={inputsReady ? "Apply fix" : "Complete required fields"}
+                          tone="secondary"
+                          onPress={() => resolveMutation.mutate(blocker.id)}
+                          loading={resolveMutation.isPending && resolveMutation.variables === blocker.id}
+                          disabled={resolveMutation.isPending || !inputsReady}
+                        />
                       </View>
-                      <Text selectable style={styles.bodyText}>{blocker.description}</Text>
-                      {Array.isArray(blocker.payload.requiredFields) ? blocker.payload.requiredFields.map((field) => {
-                        const fieldKey = String(field);
-                        const fieldLabels = blocker.payload.fieldLabels && typeof blocker.payload.fieldLabels === "object"
-                          ? blocker.payload.fieldLabels as Record<string, unknown>
-                          : {};
-                        const fieldHints = blocker.payload.fieldHints && typeof blocker.payload.fieldHints === "object"
-                          ? blocker.payload.fieldHints as Record<string, unknown>
-                          : {};
-                        const fieldLabel = String(fieldLabels[fieldKey] ?? fieldKey);
-                        const fieldHint = fieldHints[fieldKey] ? String(fieldHints[fieldKey]) : null;
-                        return (
-                          <View key={`${blocker.id}:${fieldKey}`} style={styles.blockerField}>
-                            <Text selectable style={styles.blockerFieldLabel}>{fieldLabel}</Text>
-                            <AppTextInput
-                              value={blockerValues[blocker.id]?.[fieldKey] ?? ""}
-                              onChangeText={(value) => setBlockerValues((current) => ({
-                                ...current,
-                                [blocker.id]: {
-                                  ...current[blocker.id],
-                                  [fieldKey]: value,
-                                },
-                              }))}
-                              placeholder={fieldLabel}
-                              placeholderTextColor={palette.textSoft}
-                              selectionColor={palette.cyan}
-                              style={styles.blockerInput}
-                            />
-                            {fieldHint ? <Text selectable style={styles.blockerFieldHint}>{fieldHint}</Text> : null}
-                          </View>
-                        );
-                      }) : null}
-                      <AppButton
-                        label="Apply fix"
-                        tone="secondary"
-                        onPress={() => resolveMutation.mutate(blocker.id)}
-                        loading={resolveMutation.isPending && resolveMutation.variables === blocker.id}
-                        disabled={resolveMutation.isPending}
-                      />
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               </SurfaceCard>
             ) : null}
@@ -1171,7 +1217,7 @@ function ReviewReadinessCard({ readiness }: { readiness: ReviewReadiness }) {
       subtitle={readiness.subtitle}
     >
       <View style={styles.readinessHeader}>
-        <StatusPill label={readiness.tone === "success" ? "Auto-post eligible" : readiness.tone === "danger" ? "Action required" : "Review recommended"} tone={readiness.tone} />
+        <StatusPill label={readiness.tone === "success" ? "Ready for review" : readiness.tone === "danger" ? "Action required" : "Review recommended"} tone={readiness.tone} />
       </View>
       <View style={styles.readinessGrid}>
         {readiness.checks.map((check) => (
@@ -1510,7 +1556,7 @@ function buildReviewReadiness({
   const trustedPrice = hasSellerPrice || acceptedComps >= 2 || (pricingEvidence?.confidence ?? 0) >= 0.55;
   const hasLeadPhoto = Boolean(selectedLeadPhotoId || draft.leadPhotoId || draft.photos[0]);
   const noBlockers = draft.blockers.length === 0;
-  const autoEligible = noBlockers && priceReady && trustedPrice && confidenceStrong && hasLeadPhoto;
+  const publishReady = noBlockers && priceReady && trustedPrice && confidenceStrong && hasLeadPhoto;
 
   if (draft.status === "published") {
     return {
@@ -1543,11 +1589,11 @@ function buildReviewReadiness({
     };
   }
 
-  if (autoEligible) {
+  if (publishReady) {
     return {
       eyebrow: "Publish readiness",
-      title: "This draft is safe to publish fast",
-      subtitle: "Confidence, photos, price, and eBay requirements are aligned. You can publish without more typing.",
+      title: "This draft is ready for your publish decision",
+      subtitle: "Confidence, photos, price, and eBay requirements are aligned. Review the result, then publish without more typing.",
       tone: "success",
       checks: [
         { label: `${Math.round(draft.confidence * 100)}% AI confidence`, passed: true },
@@ -1563,7 +1609,7 @@ function buildReviewReadiness({
     title: pricingLocked ? "Confirm the price before listing" : "Review recommended before publishing",
     subtitle: pricingLocked
       ? "The item can still move forward, but ListingOS needs a seller-confirmed price because the market evidence is not strong enough."
-      : "The draft is editable and close, but one or more confidence checks are below the auto-post bar.",
+      : "The draft is editable and close, but one or more confidence checks still need seller review.",
     tone: "warning",
     checks: [
       { label: `${Math.round(draft.confidence * 100)}% AI confidence`, passed: confidenceStrong },
@@ -1953,6 +1999,16 @@ function toneForPublishStatus(status: string): "neutral" | "success" | "warning"
   if (status === "failed") return "danger";
   if (status === "queued" || status === "publishing") return "warning";
   return "accent";
+}
+
+function blockerInputsReady(
+  blocker: DraftPayload["blockers"][number],
+  values: Record<string, string> | undefined,
+) {
+  if (!Array.isArray(blocker.payload.requiredFields)) return true;
+  return blocker.payload.requiredFields.every((field) => (
+    (values?.[String(field)] ?? "").trim().length > 0
+  ));
 }
 
 const createStyles = (palette: Palette) => StyleSheet.create({

@@ -1,89 +1,122 @@
-# Submission Checklist
+# Final Submission Checklist
 
-Use this file as the final polish gate before pushing ListingOS through Devpost, store-review prep, or public demo distribution.
+Use this as the single deadline checklist. Checked items were verified during the
+2026-07-21 audit; unchecked items still require action or fresh confirmation.
 
-## 1. Brand And Naming
+## P0 — Must Finish Before The Deadline
 
-- App name is `ListingOS` everywhere user-facing.
-- Bundle/package identifiers remain `com.jongan69.listingos`.
-- Deep-link scheme remains `listingos://`.
-- Logo assets are current and centered across Android adaptive icon, iOS icon, favicon, splash, and README hero.
-- Public links are consistent across README, store copy, Devpost copy, and app metadata:
-  - Web: `https://listingos.expo.app`
-  - Devpost: `https://devpost.com/software/listingos`
-  - GitHub: `https://github.com/jongan69/ListingOS-AI`
-  - Support: `https://seller-ai-platform.jonathang132298.workers.dev/app-support`
-  - Privacy: `https://seller-ai-platform.jonathang132298.workers.dev/privacy`
+- [ ] Merge the review-first publish safety changes.
+- [ ] Run `npm run verify:submission` on the final merged worktree.
+- [ ] Deploy the dedicated judge web build with `npm run web:deploy:proof`.
+- [ ] Verify all three Proof Mode scenarios signed out at `https://listingos.expo.app`.
+- [ ] Upload the prepared 2:30 YouTube replacement documented in
+      [`final-renders/README.md`](../ListingOS-Hackathon-Demo-Assets/final-renders/README.md).
+- [ ] Replace the Devpost video URL and confirm the new embed signed out.
+- [ ] Confirm rights or licenses for the music bed and third-party visuals.
+- [ ] Re-open the final public Devpost page in a private window.
 
-## 2. Public Claims
+## Verified Public Submission State
 
-- Review [`docs/CLAIMS.md`](CLAIMS.md) before editing any public-facing copy.
-- Do not claim sold-comps pricing unless it is live.
-- Do not claim auction publishing unless the Trading API publish path is verified.
-- Do not claim iOS notification delivery unless it has been re-verified on a physical iPhone.
-- Keep latency claims framed as demo evidence, not universal guarantees.
+- [x] `https://devpost.com/software/listingos` returns HTTP 200.
+- [x] The public page is listed as submitted to OpenAI Build Week.
+- [x] The public pitch says `publish them to eBay`, not `online marketplaces`.
+- [x] The public page embeds a YouTube video.
+- [x] Six gallery screenshots are present.
+- [x] The repository link points to the public MIT-licensed
+      `https://github.com/jongan69/ListingOS-AI` repository.
+- [x] `https://listingos.expo.app` returns HTTP 200.
+- [x] Worker `/health`, `/app-support`, and `/privacy` each return HTTP 200.
+- [x] Worker health reports OpenAI, eBay, storage, queues, D1, analytics, RevenueCat server
+      trust, and webhook authorization configured; billing enforcement reports `enforce`.
+- [x] The public TestFlight link resolves to `Join the ListingOS AI beta`.
+- [x] The Play internal-test link redirects a signed-out visitor to Google authentication;
+      it is therefore not the primary judge path.
 
-## 3. Demo Package
+## Video Gate
 
-- Demo narration matches [`ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md`](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md).
-- Shot list and beat map match [`ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md).
-- Device capture follows [`docs/DEMO_RECORDING.md`](DEMO_RECORDING.md).
-- Marketplace execution and team ownership are documented in [`docs/LISTINGOS_MARKETPLACE_PLAN.md`](LISTINGOS_MARKETPLACE_PLAN.md).
-- Working files live under [`ListingOS-Hackathon-Demo-Assets`](../ListingOS-Hackathon-Demo-Assets).
-- Final gallery assets include:
-  - Home hero
-  - Photo intake
-  - Queue / processing
-  - Review screen
-  - Blocker resolution or verify state
-  - Published proof
-- Final video is uploaded to YouTube, under 3 minutes, and visible to judges without requiring a login.
-- Audio clearly explains what was built, how Codex was used, and how GPT-5.6 was used.
-- If the upload is unlisted rather than public, verify it in an incognito/private window before submitting.
+The current public upload `I67o7B2JfYQ` is exactly 3:00. Its polished presentation ends at
+2:30 and an unfinished duplicate take occupies the final 30 seconds. Do not leave that as
+the final judge artifact.
 
-## 4. Devpost Fields
+- [x] Clean replacement created locally:
+      `ListingOS-Hackathon-Demo-Assets/final-renders/listingos-openai-build-week-final-2m30s.mp4`.
+- [x] Replacement verified at 150.002 seconds, 1920×1080, 30 fps, H.264/AAC, 22,110,845
+      bytes, with a successful full decode.
+- [ ] Replacement uploaded to YouTube as **public**.
+- [ ] YouTube processed duration is below three minutes.
+- [ ] Signed-out playback works with audio.
+- [ ] Narration clearly covers what was built, how GPT-5.6 is integrated, and how Codex was
+      used.
+- [ ] Description says timing is from a recorded run, not a guaranteed SLA.
+- [ ] Description says ListingOS is independent and not endorsed by eBay.
+- [ ] Music and other third-party material satisfy the Official Rules rights requirement.
 
-- Title: `ListingOS`
-- Elevator pitch: current value from [`docs/DEVPOST_SUBMISSION.md`](DEVPOST_SUBMISSION.md)
-- Built-with tags reflect the real stack only.
-- Project URL points to `https://listingos.expo.app`
-- Repo URL points to `https://github.com/jongan69/ListingOS-AI`
-- Repo remains public through judging, or if it becomes private it is shared with `testing@devpost.com` and `build-week-event@openai.com`.
-- Judge instructions clearly warn that publish is a real marketplace mutation.
-- Contribution statement is present and accurate.
-- `/feedback` Codex Session ID is attached and matches the main build thread.
-- Thumbnail and gallery images are uploaded.
-- Demo video URL is attached.
+## Proof Mode Gate
 
-## 5. Store Prep
+- [x] Runtime code bypasses authenticated fetches for fixture draft and listing data.
+- [x] eBay and ListingOS publish mutations throw or remain disabled in Proof Mode.
+- [x] Blocker repair and edits remain local to the fixture state.
+- [x] Fixture comparable rows no longer reuse a real eBay listing URL.
+- [x] Fixture copy distinguishes illustrative review data from separate historical publish
+      metadata.
+- [ ] Public judge deployment visibly renders `Proof mode` on Home.
+- [ ] Published scenario opens without seller OAuth.
+- [ ] Graded-card scenario visibly locks weak pricing.
+- [ ] Blocker scenario repairs locally and still shows `No live eBay mutation`.
 
-- App Store / Play copy is sourced from [`docs/APP_STORE_COPY.md`](APP_STORE_COPY.md).
-- `store.config.json` matches canonical title, subtitle, URLs, and description.
-- Support and privacy URLs return HTTP 200.
-- Store screenshots use the final branded UI, not placeholder builds.
-- Review notes warn that production credentials can create real eBay listings.
+Use the dedicated command:
 
-## 6. Technical Readiness
+```sh
+npm run web:deploy:proof
+```
 
-- `npm run lint`
-- `npm run typecheck`
-- `npm run worker:check`
-- `npm run doctor`
-- Verify any remaining `expo install --check` drift is intentionally accepted or patched before release.
-- Deployed Worker health endpoint returns HTTP 200:
-  - `https://seller-ai-platform.jonathang132298.workers.dev/health`
-- If demonstrating publish, verify buyer-facing listing media after publish.
+Do not enable Proof Mode in native production EAS profiles.
 
-## 7. Final Sanity Check
+## Claim Gate
 
-- No API keys, OAuth codes, seller tokens, or `.env` values appear in screenshots, docs, or the video.
-- No placeholder art, dummy icons, or dead links remain.
-- Copy is crisp, product-led, and consistent with the actual app.
-- Submission story leads with the working loop:
-  - photos
-  - AI draft
-  - review
-  - verify
-  - publish
+- [ ] Every public sentence still fits [`CLAIMS.md`](CLAIMS.md).
+- [ ] Publish is described as an explicit seller action after review.
+- [ ] Fixed-price only; no auction claim.
+- [ ] Active comparable listings only; no sold-comps claim.
+- [ ] Sony is import-only; no remote-control claim.
+- [ ] On-device work is photo-quality scoring; no object-detection claim.
+- [ ] ListingOS Market is labelled beta/prototype and omitted from the winning core.
+- [ ] Buyer inquiry delivery and seller inbox/reply are not claimed as shipped.
+- [ ] RevenueCat is described as metering/enforcement implementation, not live production
+      subscriptions.
+- [ ] Any under-one-minute statement is explicitly one recorded run.
 
-If one thing is still soft, fix the product proof before polishing the marketing around it.
+## Technical Gate
+
+```sh
+npm run verify:submission
+```
+
+That command must cover:
+
+- [ ] lint with zero warnings;
+- [ ] app and Worker typecheck;
+- [ ] safety invariant checks;
+- [ ] documentation-link checks;
+- [ ] Expo Doctor;
+- [ ] Worker dry-run bundle;
+- [ ] Android export.
+
+Then perform the minimum smoke pass:
+
+- [ ] Web Home and Proof Mode in a signed-out/private browser.
+- [ ] Android launch, photo intake, queue, review, blocker state, and explicit publish button.
+- [ ] No live eBay publish as a routine smoke test.
+- [ ] No keys, OAuth codes, account identifiers, or private environment values in public
+      media.
+
+## External Gates That Code Cannot Complete
+
+- YouTube upload and Devpost URL replacement.
+- Final private-window submission review.
+- Music/visual rights confirmation.
+- Physical-device release behavior.
+- App Store Connect and Google Play dashboard state.
+
+Store approval and production subscriptions are not hackathon critical-path items. Do not
+let them preempt the P0 list above.

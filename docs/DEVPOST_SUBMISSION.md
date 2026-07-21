@@ -6,8 +6,8 @@ Canonical companion docs:
 
 - Claim ledger (present tense, binding): [`docs/CLAIMS.md`](CLAIMS.md)
 - Roadmap (future tense only): [`docs/ROADMAP.md`](ROADMAP.md)
-- Demo video script: [`ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md`](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md)
-- Demo production plan: [`ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md)
+- Final video handoff: [`ListingOS-Hackathon-Demo-Assets/final-renders/README.md`](../ListingOS-Hackathon-Demo-Assets/final-renders/README.md)
+- Historical script and production plan: [`ListingOS-Hackathon-Demo-Assets/README.md`](../ListingOS-Hackathon-Demo-Assets/README.md)
 - Demo recording checklist: [`docs/DEMO_RECORDING.md`](DEMO_RECORDING.md)
 - App-store copy: [`docs/APP_STORE_COPY.md`](APP_STORE_COPY.md)
 - Final ship checklist: [`docs/SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md)
@@ -26,12 +26,7 @@ Elevator pitch, under 200 characters:
 Photos in. Listing out. ListingOS is the AI seller agent that uses GPT-5.6 to turn product photos into price-aware, evidence-backed drafts and publish them to eBay from one review screen.
 ```
 
-> **Action required — the live Devpost pitch does not match this and overclaims.** As of
-> 2026-07-20 the submitted tagline reads "...publish them to **online marketplaces** from one
-> review screen." ListingOS publishes to eBay only; multi-destination publishing is roadmap
-> work in [`ROADMAP.md`](ROADMAP.md) §1. Replace the live value with the text above (187
-> characters, within the 200 limit). The ambition belongs in "What's next" below, where it
-> reads as a plan instead of a false present-tense claim.
+The public Devpost page was rechecked on 2026-07-21 and uses this eBay-only pitch.
 
 Recommended category:
 
@@ -96,7 +91,13 @@ The key product lesson is that sellers do not need another dashboard. They need 
 
 ListingOS today is an eBay seller tool. The next phase turns it into a channel-agnostic listing layer.
 
-**More places to sell.** A first-party ListingOS Market channel, so a seller reviews an item once and publishes it to ListingOS, eBay, or both from the same draft — with a public listing feed, shareable detail pages, and a text-only buyer inquiry flow. Additional destinations follow behind the same channel-adapter interface, and auction publishing arrives through a Trading API adapter. The defensible layer is not the feed; it is the shared listing intelligence, evidence, media, and safety pipeline underneath it that makes one reviewed item publishable to more than one place.
+**More places to sell.** Complete the experimental ListingOS Market public-listing beta so
+a seller can review an item once and route it to ListingOS, eBay, or both from the same
+draft. The public feed and seller-controlled beta publish surface exist; verified email
+delivery and a native seller inbox/reply flow are next. Additional destinations can then
+follow behind the same channel-adapter interface, and auction publishing can arrive through
+a verified Trading API adapter. The defensible layer is not the feed; it is the shared
+listing intelligence, evidence, media, and safety pipeline underneath it.
 
 **Better cameras.** Sony capture today is import-only: photos shot on a Sony body are auto-imported and kept together as one capture session. Next is tethered control — triggering the shutter and reading camera settings from the app — so a seller can run a full multi-item capture session without touching the camera. The capture-source abstraction and capture-session schema are already in place for it.
 
@@ -161,7 +162,9 @@ Not applicable. ListingOS is a mobile seller app, not a plugin or developer tool
 
 ## Devpost Progress
 
-**Status as of 2026-07-20: submission started, not finalized. Deadline 2026-07-21, 5:00 PM Pacific — roughly one day out.**
+**Status verified 2026-07-21:** the public project is reachable and listed as submitted to
+OpenAI Build Week. The deadline remains 5:00 PM Pacific. Re-save and recheck the entry after
+the final video and web-demo replacements.
 
 A submission record exists in the Build Week console at
 `devpost.com/submit-to/30223-openai-build-week/manage/submissions/1090292-listingos/`.
@@ -175,10 +178,10 @@ Saved and verified:
 - Verified project story, built-with tags, production web URL, and public GitHub URL are saved.
 - Submitter type, country, category, public repo, judge instructions, feedback session ID, and non-plugin status are saved.
 - Jonathan Gan's public contribution statement is saved.
-- Thumbnail uploaded to Devpost and available at `https://d112y698adiu2z.cloudfront.net/photos/production/software_thumbnail_photos/004/909/119/datas/medium.png`.
+- Thumbnail and six gallery screenshots are visible on the public project page.
 - Public repository is available at `https://github.com/jongan69/ListingOS-AI` with `main` as the default branch.
 - Production web app is deployed at `https://listingos.expo.app`.
-- A clean 3:2 gallery capture is ready at `artifacts/devpost/listingos-home-3x2.png`.
+- The public page embeds YouTube video `I67o7B2JfYQ`.
 
 ### OpenAI Build Week Submission Values
 
@@ -192,12 +195,9 @@ Saved and verified:
 | Feedback session | `019f6944-d662-7d11-8a6d-5ecc9906c817` |
 | Plugin/developer-tool instructions | Not applicable |
 
-The project is published at `https://devpost.com/software/listingos`. The Build Week
-submission form is started but the final agreement has not been accepted, so the entry is
-**not yet complete**. The window closes July 21, 2026 at 5:00 PM Pacific Time.
-
-The single remaining hard blocker is the demo video. See "Remaining Submission Blockers"
-below and [`ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md).
+The public project is `https://devpost.com/software/listingos`. Public visibility is not a
+substitute for the final private-window check: after the last edit, confirm the replacement
+video, Proof Mode, repository, agreement state, and submitted status from that page.
 
 ## Jonathan Gan Contribution
 
@@ -218,10 +218,9 @@ Use real app captures. Crop account-specific identifiers when they are not neede
 
 ## Written Summary Of The Demo Flow
 
-Not a shooting script. The video script is
-[`ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md`](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md)
-(2:40–2:55). The text below is a prose summary of the same flow, kept here for Devpost
-fields and written copy that need the narrative in one paragraph block.
+The text below is a prose summary for Devpost fields. The published presentation and its
+verified 2:30 replacement are documented in the
+[`final-renders` handoff](../ListingOS-Hackathon-Demo-Assets/final-renders/README.md).
 
 ```text
 Listing on eBay is still slower than photographing the product. ListingOS changes that.
@@ -258,7 +257,7 @@ Expo app
 - Keep one known-good generated draft available so the video can jump past provider latency without pretending the processing step is instant.
 - Keep one already-published result available to prove listing and offer IDs without creating duplicates.
 - If eBay blocks a fresh publish, show the inline blocker, its concrete fix, and the stored successful publish proof.
-- Never substitute mocked marketplace data or claim a publish succeeded based only on queue acknowledgement.
+- Never present fixture data as live marketplace results or claim a publish succeeded based only on queue acknowledgement.
 
 ## Claim Verification
 
@@ -268,19 +267,19 @@ Every public technical claim is mapped to code or runtime evidence in [`docs/CLA
 
 Ordered by what gates what. Deadline 2026-07-21, 5:00 PM Pacific.
 
-1. **Produce the demo video.** This is the only hard blocker. No current master render
-   exists — the earlier synthetic-narration candidates were abandoned along with the
-   fully-automated approach. Plan, remaining shot list, and the unresolved publish-footage
-   problem are in
-   [`ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md).
-   Requirements: public, under 3:00, audio covering what was built, how GPT-5.6 was used,
-   and how Codex was used. Narration is the founder's real voice, so no synthetic-voice
-   disclosure is needed.
-2. **Upload to YouTube** as public or unlisted, and verify playback in an incognito window.
-3. **Attach the video URL** to the Devpost project.
-4. **Upload gallery images** — `artifacts/devpost/listingos-home-3x2.png` plus final mobile
-   flow captures, if not already present.
-5. **Accept the Official Rules and Terms** agreement box to finalize. The submission form is
-   started but not complete without this step.
+1. **Deploy the dedicated Proof Mode web build.** The live site returned HTTP 200 during
+   the audit, but its deployed HTML did not visibly expose Proof Mode. Run
+   `npm run web:deploy:proof`, then open all three scenarios signed out and confirm every
+   marketplace mutation remains disabled.
+2. **Replace the current YouTube upload.** The attached public video is exactly 3:00 and an
+   accidental duplicate/raw take starts after the polished ending at 2:30. Upload the
+   verified local replacement documented in
+   [`final-renders/README.md`](../ListingOS-Hackathon-Demo-Assets/final-renders/README.md),
+   confirm public signed-out playback, and replace the Devpost URL.
+3. **Confirm media rights.** Verify that the music bed and every third-party visual are
+   owned, licensed, or otherwise authorized; a filename containing `no-copyright` is not
+   license evidence.
+4. **Re-lock the entry.** Confirm the agreement, submitted state, repository, replacement
+   video, six screenshots, and Proof Mode URL in a private window after the final save.
 
 Before final submission, run the repo-level checklist in [`docs/SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md).

@@ -1,5 +1,10 @@
 # Monetization Plan
 
+> **Product-plan status:** current mobile photo intake is review-first and exposes no
+> autopublish control. The Worker retains a guarded, entitlement-aware `autoPublish: true`
+> capability for explicit API callers, but it is not a public tier benefit and must not be
+> marketed as shipped automation. Production subscription products also remain launch work.
+
 ListingOS should monetize as a usage-bounded subscription, not as unlimited lifetime access. The product creates real variable cost through AI vision, marketplace lookups, storage, background jobs, and publishing retries, so every plan needs monthly limits and backend-enforced cost controls.
 
 ## Business Goal
@@ -67,12 +72,12 @@ Track secondary cost events for internal analysis:
 
 These are launch defaults, not permanent pricing. The MVP now uses three paid tiers to keep the paywall understandable while still covering AI/API cost risk.
 
-| Tier | Price | Annual | Monthly AI Listings | Autopublish | Best For |
+| Tier | Price | Annual | Monthly AI Listings | Guarded automation | Best For |
 | --- | ---: | ---: | ---: | --- | --- |
 | Free | $0 | $0 | 20 | No | building a listing habit |
-| Starter | $14.99/mo | $149.99/yr | 75 | Yes | casual sellers |
-| Pro | $49.99/mo | $499.99/yr | 300 | Yes | active eBay sellers |
-| Studio | $149.99/mo | $1,499.99/yr | 1,000 | Yes | resale teams / card shops |
+| Starter | $14.99/mo | $149.99/yr | 75 | Not exposed in the app | casual sellers |
+| Pro | $49.99/mo | $499.99/yr | 300 | Not exposed in the app | active eBay sellers |
+| Studio | $149.99/mo | $1,499.99/yr | 1,000 | Not exposed in the app | resale teams / card shops |
 
 Annual plans are roughly two months free. Monthly plans should remain the default while unit economics are still being measured.
 
@@ -290,14 +295,14 @@ Example monthly revenue before variable AI costs:
 
 The launch position is intentionally generous but measured: the free tier is a customer-acquisition cost, while paid tiers must maintain a variable-cost target below 30% of net subscription revenue. The product must aggressively compress images, cap AI inputs, cache lookups, avoid repeated AI calls, and use the operation ledger to adjust future quotas from real usage instead of guesses.
 
-## App UX
+## Planned App UX
 
 Keep pricing UX simple:
 
 - show remaining AI listings this month
 - show current plan
 - show upgrade button only when useful
-- show "Autopublish requires Seller plan or higher" if free users try it
+- if guarded automation is ever exposed, require explicit opt-in and explain its paid tier
 - never show backend cost language to normal sellers
 
 Paywall trigger points:
@@ -305,7 +310,7 @@ Paywall trigger points:
 - before first upload if user is signed out or out of credits
 - after free credits are used
 - when trying bulk queue on Free / Starter
-- when trying autopublish on Free
+- when a future explicit automation control is attempted on Free
 - when trying high-volume card verification without enough credits
 
 ## MVP Implementation Order

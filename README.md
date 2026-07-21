@@ -4,7 +4,7 @@
 
 # ListingOS
 
-**Product photos to publish-ready eBay listings—in seconds.**
+**Product photos to review-ready eBay drafts.**
 
 AI-powered, marketplace-verified, and deliberately seller-first — photo-to-listing automation, not template filling, manual data entry, or copy-and-paste workflows.
 
@@ -83,7 +83,7 @@ ListingOS includes a fixture-backed demonstration mode for OpenAI Build Week jud
 
 It provides three representative workflows:
 
-- a published general-merchandise example
+- an illustrative general-merchandise review paired with stored historical publish evidence
 - a graded-card example that locks weak pricing instead of presenting unsupported confidence
 - a blocker-repair example that converts a raw marketplace error into a concrete resolution path
 
@@ -173,7 +173,9 @@ ListingOS is a working MVP, not a finished multi-marketplace production platform
 
 - Auction publishing is represented in shared contracts, but the proven publishing adapter currently supports fixed-price Inventory API listings.
 - Pricing uses active eBay Browse API comparables, including image search for cards. It does not currently use sold-item data or a calibrated time-to-sale model.
-- Publishing currently targets eBay only. A first-party ListingOS Market channel and additional destinations are planned but not built.
+- eBay is the only verified external publish channel. An experimental ListingOS Market
+  public feed/detail and seller-controlled beta publish surface exists, but buyer inquiry is
+  controlled-demo-only; email delivery and the native seller inbox/reply flow are not shipped.
 
 ### Media and background execution
 

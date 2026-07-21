@@ -80,7 +80,10 @@ ebay,seller,reseller,listing,inventory,ai,photos,marketplace,commerce,scanner,ca
 
 ## Demo Hero Copy
 
-ListingOS compresses the eBay seller workflow from product photos to a verified listing draft in under a minute when the item is clear. It is not another dashboard. It is a listing machine: photos in, AI draft out, review blockers, and publish to eBay.
+In one recorded run, ListingOS moved a clear item from product photos to a verified listing
+draft in under a minute. Latency varies. It is not another dashboard. It is a listing
+machine: photos in, AI draft out, review blockers, and explicit seller-approved publish to
+eBay.
 
 Landing flow used in launch and demos:
 

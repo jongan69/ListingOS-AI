@@ -49,6 +49,7 @@ Public SDK keys are safe in client code. The secret key is not.
 | `EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS` | JSON map of hosted checkout URLs. Empty until Stripe is connected. |
 | `REVENUECAT_SECRET_API_KEY` | Worker secret. REST entitlement verification. |
 | `REVENUECAT_WEBHOOK_AUTH_TOKEN` | Worker secret. Validates inbound webhooks. |
+| `REVENUECAT_WEBHOOK_SIGNING_SECRET` | Optional Worker secret. Verifies RevenueCat HMAC signatures only after signing is enabled for the same dashboard integration. |
 | `REVENUECAT_API_VERSION` | `v1` \| `v2` \| `auto` (default). Which REST generation the secret key belongs to. |
 | `REVENUECAT_PROJECT_ID` | `89a32260`. Required by the v2 API, which scopes customers under a project. |
 
@@ -123,10 +124,23 @@ curl -s https://seller-ai-platform.jonathang132298.workers.dev/health
 ```json
 { "revenueCatSecretConfigured": true,
   "revenueCatWebhookConfigured": true,
+  "revenueCatWebhookSigningConfigured": false,
   "billingEnforcementMode": "enforce" }
 ```
 
-All three must be as shown. To repair: `npm run rc:finish`.
+The REST secret, webhook authorization, and enforcement values must be as shown. HMAC may
+remain `false` until deliberately enabled. To enable it safely:
+
+1. Open the exact webhook integration in RevenueCat and enable HMAC signing.
+2. Copy the one-time signing secret directly into the Worker with
+   `npx wrangler secret put REVENUECAT_WEBHOOK_SIGNING_SECRET`.
+3. Deploy the Worker and confirm `revenueCatWebhookSigningConfigured: true`.
+4. Send a dashboard test event and confirm HTTP 200 before relying on the integration.
+
+Do not set the Worker signing secret before the RevenueCat integration sends the matching
+`X-RevenueCat-Webhook-Signature` header: once configured, missing, stale, or mismatched
+signatures are rejected. The separate Authorization token remains required in both modes.
+To repair the base trust path: `npm run rc:finish`.
 
 ---
 

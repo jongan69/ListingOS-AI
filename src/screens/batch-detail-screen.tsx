@@ -12,7 +12,7 @@ import { StatusPill } from "@/components/status-pill";
 import { SurfaceCard } from "@/components/surface-card";
 import { appConfig } from "@/config/app";
 import { brand } from "@/config/brand";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { getSessionToken } from "@/lib/storage";
 import { type UploadProgress, uploadProgressKey } from "@/lib/upload-progress";
 import { workStatusGradient, workStatusTone } from "@/lib/work-status";
@@ -29,13 +29,25 @@ export function BatchDetailScreen() {
   const queryClient = useQueryClient();
   const apiBaseUrl = appConfig.apiBaseUrl;
   const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [sessionResolved, setSessionResolved] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const didAutoforwardRef = useRef(false);
 
   useEffect(() => {
-    void (async () => {
-      setSessionToken(await getSessionToken());
-    })();
+    let canceled = false;
+    void getSessionToken()
+      .then((token) => {
+        if (!canceled) setSessionToken(token);
+      })
+      .catch(() => {
+        if (!canceled) setSessionToken(null);
+      })
+      .finally(() => {
+        if (!canceled) setSessionResolved(true);
+      });
+    return () => {
+      canceled = true;
+    };
   }, []);
 
   const query = useQuery({
@@ -63,7 +75,11 @@ export function BatchDetailScreen() {
   const retryMutation = useMutation({
     mutationFn: () => api.queueDraftGeneration(
       { apiBaseUrl, sessionToken },
-      { batchId: batchId!, pricingStrategy: uploadProgress?.pricingStrategy ?? "balanced" },
+      {
+        batchId: batchId!,
+        pricingStrategy: uploadProgress?.pricingStrategy ?? "balanced",
+        autoPublish: false,
+      },
     ),
     onSuccess: async () => {
       setElapsedSeconds(0);
@@ -160,6 +176,24 @@ export function BatchDetailScreen() {
       query.refetch(),
       queryClient.invalidateQueries({ queryKey: ["queue", apiBaseUrl, sessionToken] }),
     ]);
+  }
+
+  if (
+    (sessionResolved && !sessionToken)
+    || (query.error instanceof ApiError && query.error.status === 401)
+  ) {
+    return (
+      <AppScreen>
+        <ScreenToolbar title={`${brand.shortName} progress`} onBack={() => router.replace("/")} />
+        <SurfaceCard
+          eyebrow="Session required"
+          title="Reconnect to view this batch"
+          subtitle="Your upload and draft remain on the server. Reconnect from Home to resume review."
+        >
+          <AppButton label="Return home to reconnect" onPress={() => router.replace("/")} />
+        </SurfaceCard>
+      </AppScreen>
+    );
   }
 
   return (

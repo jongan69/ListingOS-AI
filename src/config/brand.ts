@@ -14,7 +14,7 @@ export const brand = {
   links: {
     website: "https://listingos.expo.app",
     devpost: "https://devpost.com/software/listingos",
-    github: "https://github.com/jongan69/ListingOS",
+    github: "https://github.com/jongan69/ListingOS-AI",
     support: "https://seller-ai-platform.jonathang132298.workers.dev/app-support",
     privacy: "https://seller-ai-platform.jonathang132298.workers.dev/privacy",
   },

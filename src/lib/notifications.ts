@@ -13,14 +13,20 @@ export type PublishNotificationPermissionState =
   | "not-determined"
   | "not-available";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+let notificationHandlerConfigured = false;
+
+export function configurePublishNotificationHandling() {
+  if (notificationHandlerConfigured) return;
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+  notificationHandlerConfigured = true;
+}
 
 export async function registerPublishNotifications(input: {
   apiBaseUrl: string;

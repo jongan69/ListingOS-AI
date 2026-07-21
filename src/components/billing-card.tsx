@@ -102,7 +102,7 @@ export function PaywallPanel({
       </View>
       <Text selectable style={styles.paywallTitle}>Pay for saved time, not random locks.</Text>
       <Text selectable style={styles.paywallBody}>
-        Free gets you to the aha moment. Paid plans unlock more monthly AI listings, autopublish, and higher-volume workflow.
+        Free gets you to the aha moment. Paid plans unlock more monthly AI listings, faster queue capacity, and higher-volume workflow.
       </Text>
       {!platformSupported || isSetupRequired ? (
         <View style={styles.setupNotice}>

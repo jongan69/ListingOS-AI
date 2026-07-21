@@ -1,10 +1,18 @@
 # ListingOS Market Beta: Build Week Execution Plan
 
-## Decision
+> **Historical planning document — not a shipped-feature claim.** As audited on 2026-07-21,
+> only part of this plan exists. An experimental public listing/feed and seller-controlled
+> beta publish surface is present, but buyer inquiry is controlled-demo-only, outbound email
+> delivery is unconfigured, and the native seller inbox/reply flow is not implemented. Do
+> not describe buyer-to-seller messaging as end to end. eBay remains the only verified
+> external publish channel and the hackathon core remains the review-first eBay workflow.
 
-Build an owned ListingOS marketplace channel inside the current project. Do not fork the app before the hackathon.
+## Historical Decision
 
-The Tuesday deliverable is **ListingOS Market Beta**, a public listing and seller-inquiry channel that works with or without eBay:
+The plan was to build an owned ListingOS marketplace channel inside the current project
+without forking the app before the hackathon.
+
+The proposed Tuesday deliverable was **ListingOS Market Beta**, a public listing and seller-inquiry channel that would work with or without eBay:
 
 1. A seller signs into ListingOS without needing an eBay account.
 2. The seller photographs an item and reviews the existing AI-generated draft.
@@ -26,7 +34,7 @@ The defensible product is not the small marketplace feed by itself. It is the sh
 
 ## Hard Product Boundary
 
-### Must Ship By Tuesday
+### Original Tuesday Target — Not Current State
 
 - First-party ListingOS email sign-in for sellers, independent of eBay OAuth.
 - Optional Connect eBay action after ListingOS sign-in.
@@ -483,9 +491,11 @@ npm run export:android
 
 Also apply the new migration locally before remote deployment, verify Worker health, open the market feed and listing in a private browser, and test one physical Android plus one physical iPhone.
 
-## Demo Story
+## Superseded Demo Story
 
-Target a 2:40 to 2:55 final video, per `ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md`.
+This concept was not used for the submitted video. The current submission artifact and
+replacement are documented in
+[`../ListingOS-Hackathon-Demo-Assets/final-renders/README.md`](../ListingOS-Hackathon-Demo-Assets/final-renders/README.md).
 
 1. **Problem, 10 seconds:** New sellers abandon selling because creating listings and choosing channels is too much work.
 2. **Capture, 20 seconds:** Photograph an item once.
@@ -509,7 +519,9 @@ Remove work in this order without breaking the core story:
 4. Native share sheet; retain Copy Link and Open.
 5. Push deep-link polish; retain inbox polling and unread count.
 
-Do not cut first-party seller identity, public listing visibility, verified first inquiry, seller reply, block/report, or the no-live-mutation proof path. Those are the minimum credible product.
+That was the original scope rule. It is superseded: the current submission keeps the public
+listing beta, cuts buyer-delivery and seller-reply claims, and centers the no-live-mutation
+eBay Proof Mode path.
 
 ## Post-Hackathon Sequence
 
@@ -529,8 +541,12 @@ Do not cut first-party seller identity, public listing visibility, verified firs
 - Expo SDK 57 supports push token registration and notification deep-link handling, but remote notifications require a development or release build rather than Expo Go on Android: https://docs.expo.dev/versions/v57.0.0/sdk/notifications/
 - Resend documents direct email delivery from Cloudflare Workers; provider credentials and domain verification are a day-zero organizer dependency: https://resend.com/docs/send-with-cloudflare-workers
 
-## Final Recommendation
+## Historical Recommendation — Superseded
 
-Commit to this exact wedge: **AI listing creation plus an owned public listing plus verified seller messaging, with eBay as an optional high-trust transaction channel.**
+The original recommendation was AI listing creation plus an owned public listing plus
+verified seller messaging. The verified-messaging portion did not ship and must not appear
+in the current pitch. The current wedge is review-first AI listing creation and explicit
+fixed-price eBay publishing, with the experimental public ListingOS Market feed as a
+secondary beta surface.
 
-That is meaningfully bigger than an eBay listing helper, still truthful, and small enough to prove before Tuesday. A larger marketplace feature set would make the demo less credible, not more competitive.
+A larger marketplace feature set would make the demo less credible, not more competitive.

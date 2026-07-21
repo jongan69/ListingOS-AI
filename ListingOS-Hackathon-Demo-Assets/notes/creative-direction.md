@@ -57,6 +57,11 @@ The footage should emphasize speed, simplicity, and seller utility over technica
 
 ## Music Pick
 
+**Rights gate:** the repository contains candidate audio files, not proof of a license.
+Confirm the exact track's ownership or license before publication and retain that evidence.
+A filename containing `no-copyright` is not sufficient. If rights cannot be confirmed,
+replace the bed with owned or clearly licensed audio before the final Devpost lock.
+
 ### Preferred Bed
 
 - `music-library/lofi-house/03-lofi-deep-house-mix.mp3`

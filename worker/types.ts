@@ -30,6 +30,8 @@ export type Bindings = {
   EXPO_ACCESS_TOKEN?: string;
   REVENUECAT_SECRET_API_KEY?: string;
   REVENUECAT_WEBHOOK_AUTH_TOKEN?: string;
+  /** Optional HMAC secret from the RevenueCat webhook integration. */
+  REVENUECAT_WEBHOOK_SIGNING_SECRET?: string;
   /** Which REST generation the secret key belongs to. Defaults to auto-detect. */
   REVENUECAT_API_VERSION?: "v1" | "v2" | "auto";
   /** Required for the v2 API, which scopes customers under a project. */
@@ -45,6 +47,8 @@ export type Bindings = {
   OFFERUP_DEFAULT_LATITUDE?: string;
   OFFERUP_DEFAULT_LONGITUDE?: string;
   OFFERUP_RADIUS_MILES?: string;
+  /** Explicit six-digit code for a controlled marketplace demo; absent means buyer verification fails closed. */
+  MARKET_EMAIL_VERIFICATION_DEMO_CODE?: string;
 };
 
 export type Variables = {

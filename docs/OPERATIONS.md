@@ -35,6 +35,7 @@ Optional values:
 - `EBAY_MARKETPLACE_ID`
 - `EBAY_USE_SANDBOX`
 - `PUBLIC_API_BASE_URL`
+- `REVENUECAT_WEBHOOK_SIGNING_SECRET` (only after HMAC signing is enabled for the same RevenueCat webhook integration)
 
 Use a random, stable `APP_ENCRYPTION_SECRET`. If it changes, existing encrypted eBay refresh tokens can no longer be decrypted. The code falls back to `EBAY_CLIENT_SECRET`, but a separate secret is preferred.
 
@@ -79,6 +80,13 @@ npx wrangler secret put APP_ENCRYPTION_SECRET
 npx wrangler secret put REVENUECAT_SECRET_API_KEY
 npx wrangler secret put REVENUECAT_WEBHOOK_AUTH_TOKEN
 ```
+
+RevenueCat webhook Authorization is always required. HMAC signing is optional and must be
+enabled as one coordinated change: enable signing in the RevenueCat dashboard, copy its
+one-time secret with `npx wrangler secret put REVENUECAT_WEBHOOK_SIGNING_SECRET`, deploy,
+then send a dashboard test event. Do not configure only the Worker side; it will reject
+unsigned deliveries. `/health` reports the two states separately as
+`revenueCatWebhookConfigured` and `revenueCatWebhookSigningConfigured`.
 
 `PUBLIC_API_BASE_URL` must be the externally reachable Worker origin. eBay uses URLs under this origin to fetch listing photos.
 

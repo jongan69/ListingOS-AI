@@ -1,8 +1,14 @@
 # ListingOS Demo — Production Plan
 
-Status: active · Last updated 2026-07-19 · Supersedes [`archive/automated-pass/FINAL_VIDEO_NOTES.md`](archive/automated-pass/FINAL_VIDEO_NOTES.md)
+Status: superseded planning record · Last reconciled 2026-07-21
 
-This is the organizing document for the demo video. It exists because the folder
+> The video described below is not the current submission artifact. Devpost now embeds
+> YouTube video `I67o7B2JfYQ`. The intended replacement is the verified 2:30 cut documented
+> in [`final-renders/README.md`](final-renders/README.md). Use
+> [`../docs/SUBMISSION_CHECKLIST.md`](../docs/SUBMISSION_CHECKLIST.md) for the remaining
+> deadline gates. Keep this file only as production provenance.
+
+This was the organizing document for the planned demo video. It exists because the folder
 previously held two incompatible plans — a fully automated Remotion render and a
 live-narrated script — with nothing describing how they combine.
 
@@ -32,7 +38,7 @@ edit's rhythm, which is why `DEMO_VIDEO_SCRIPT_V2.md` calls for hard cuts and no
 The Remotion/Rotato masters described in `FINAL_VIDEO_NOTES.md` were rendered while
 the product was incomplete and the required footage did not exist. Track B was doing
 Track A's job: polish standing in for proof. Those renders are retained as tooling
-references only. See `docs/archive-automated-pass/` for the record.
+references only. See [`archive/automated-pass/`](archive/automated-pass/) for the record.
 
 ---
 

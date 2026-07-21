@@ -10,6 +10,7 @@ Everything here is **present tense**. Forward-looking statements live in [`ROADM
 | GPT-5.6 analyzes product photos | `worker/index.ts` calls `/v1/responses` with `input_image`; default model constant is `gpt-5.6-luna` | High | Yes | GPT-5.6 analyzes product photos through the OpenAI Responses API. |
 | Model output is structured and validated | Both draft and card OCR calls use strict JSON Schema; public draft payload is parsed by Zod | High | Yes | GPT-5.6 returns strict structured output that the Worker validates before persistence. |
 | Draft generation is asynchronous | Upload batches, draft jobs, Cloudflare Queue producers/consumers, and queue status routes are implemented | High | Yes | Draft generation runs asynchronously while the seller continues from Home. |
+| Photo intake is review-first | `DraftJobsCreateInputSchema` defaults `autoPublish` to `false`; current mobile intake and retry paths send `false`; a live publish remains a separate seller action | High | Yes | Photo intake creates a draft for review. In the current mobile flow, publishing starts only after the seller explicitly presses Publish. |
 | Cloudflare is the backend platform | Deployed Worker plus configured D1, R2, KV, and three Queues; `/health` reports all configured | High | Yes | Backed by Cloudflare Workers, D1, R2, KV, and Queues. |
 | Sellers connect their own eBay accounts | OAuth connect/callback flow, encrypted token persistence, Identity lookup, and seller session routes are implemented | High | Yes | Sellers connect with eBay OAuth and publish through their own account. |
 | ListingOS publishes real fixed-price listings | Inventory item, offer, and publish calls are implemented; production Worker uses `EBAY_USE_SANDBOX=false`; published D1 attempts contain real listing/offer IDs | High | Yes | Publishes verified fixed-price listings through eBay's Inventory API. |
@@ -18,8 +19,10 @@ Everything here is **present tense**. Forward-looking statements live in [`ROADM
 | Graded-card identity is guarded | OpenAI label OCR, PSA cert lookup, Pokémon catalog resolution, identity confidence gates, and exact-comp requirements are implemented | High | Yes | Cross-checks graded cards against PSA, catalog, and eBay evidence; weak identity locks pricing for review. |
 | Blockers are resolved in-app | Seller readiness, required-aspect verification, policy/location resolution routes, and inline actions are implemented | High | Yes, qualified | Surfaces eBay blockers inline and resolves supported policy, location, and aspect issues in-app. |
 | The seller can edit before publishing | Review supports title, price override, strategy, category, condition, specifics, description, photo order, and lead photo | High | Yes | One review screen keeps AI defaults editable before verify and publish. |
+| Judges can test without mutating eBay | Proof Mode uses local fixtures, bypasses authenticated fetches, disables marketplace mutations, and preserves local edit/blocker-repair behavior | High | Yes, qualified | Proof Mode is a non-mutating product walkthrough. Its photos, review fields, prices, and comparable rows are illustrative; stored publish metadata is historical evidence from a separate verified Android run. |
 | Background completion can notify the seller | Device token registration, Expo Push delivery, Worker publish notifications, and Android delivery proof exist | Medium | Yes, qualified | Android background publish alerts were verified; iOS delivery still requires device-level confirmation. |
 | RevenueCat subscriptions are live | SDK integration, backend usage metering, entitlement sync routes, webhook validation, and enforcement exist; production store products are not finalized | High | No as a launch claim | RevenueCat-backed metering is implemented, but production subscription products remain launch work. |
+| ListingOS Market is an end-to-end buyer channel | An experimental public listing/feed and seller-controlled beta publish surface exists, but inquiry is controlled-demo-only, email delivery is unconfigured, and the native seller inbox/reply flow is not implemented | High | No as an end-to-end claim | An experimental ListingOS Market public-listing beta exists. eBay remains the only verified external publish channel; do not claim verified inquiry delivery, seller inbox, seller replies, or a complete marketplace flow. |
 | Auction publishing is supported | Shared contracts include auction mode, but no verified Trading API publish adapter is active | High | No | Fixed-price is the verified MVP; auction publishing is roadmap work. |
 | Image enhancement is automatic | AI returns an enhancement plan, but transformed variants are not generated | High | No | AI recommends honest image improvements; automated transforms are roadmap work. |
 | Local asking-price signals from OfferUp | `worker/index.ts` queries `offerup.com/search` and resolves item detail URLs; surfaced as supplementary seller context in `src/screens/draft-detail-screen.tsx` | High | Yes, qualified | Shows local asking-price signals for extra context. These are asking prices, not sold data, and do not affect eBay publish safety. |
@@ -33,9 +36,16 @@ Everything here is **present tense**. Forward-looking statements live in [`ROADM
 
 ## Verification Snapshot
 
-- Worker health checked July 17, 2026: HTTP 200 with OpenAI, eBay, storage, queues, and D1 configured.
-- Worker dry-run bundle checked successfully.
-- Mobile and Worker TypeScript projects checked successfully.
-- Android and web Expo production exports checked successfully.
+- Public Devpost project, production web app, Worker health, support, privacy, public GitHub
+  repository, and TestFlight invite checked July 21, 2026.
+- Worker health returned HTTP 200 with OpenAI, eBay, storage, queues, D1, analytics,
+  RevenueCat REST trust, and RevenueCat webhook authorization configured. This does not
+  prove that production subscription products are purchasable.
+- The public web app returned HTTP 200, but the deployed build did not visibly expose Proof
+  Mode during the July 21 audit. Treat the judge path as pending until the dedicated proof
+  build is deployed and rechecked signed out.
+- The current public YouTube upload is playable but contains an accidental duplicate take
+  after the polished ending. A verified 2:30 replacement exists locally; the external upload
+  and Devpost URL swap remain pending.
 - No obvious committed API key or private-key patterns were found in the tracked tree.
 - Full automated unit, integration, and device E2E suites are not yet present; do not claim automated coverage.

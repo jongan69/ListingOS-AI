@@ -1,3 +1,5 @@
+import { proofModeBuildEnabled } from "@/config/proof-mode-build";
+
 const productionApiBaseUrl = "https://seller-ai-platform.jonathang132298.workers.dev";
 const webPurchasePlanIds = ["starter", "pro", "studio"] as const;
 
@@ -64,7 +66,7 @@ function normalizePublicSdkKey(value: string | undefined): string | null {
 
 export const appConfig = {
   apiBaseUrl: normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL),
-  proofModeEnabled: process.env.EXPO_PUBLIC_PROOF_MODE?.trim() === "true",
+  proofModeEnabled: proofModeBuildEnabled,
   easProjectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() || null,
   revenueCatMode: normalizeRevenueCatMode(process.env.EXPO_PUBLIC_REVENUECAT_MODE),
   revenueCatTestApiKey: normalizePublicSdkKey(process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY),

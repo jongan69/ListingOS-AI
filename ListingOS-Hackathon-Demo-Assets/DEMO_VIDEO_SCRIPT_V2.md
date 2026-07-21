@@ -1,8 +1,11 @@
-# ListingOS — Demo Video Script (OpenAI Build Week)
+# ListingOS — Planned Demo Video Script (OpenAI Build Week)
 
-> **Status: current script.** Production spine is [`PRODUCTION_PLAN.md`](PRODUCTION_PLAN.md).
+> **Status: superseded planning record.** This is not a transcript of the video currently
+> attached to Devpost. Current artifact and replacement metadata live in
+> [`final-renders/README.md`](final-renders/README.md); remaining submission gates live in
+> [`../docs/SUBMISSION_CHECKLIST.md`](../docs/SUBMISSION_CHECKLIST.md).
 >
-> Two things must be resolved before shooting:
+> At the time this script was written, two things still needed resolution before shooting:
 > 1. **Publish footage blocker** — this script opens on `REAL LISTING · REAL ACCOUNT` and
 >    narrates a successful publish at 2:00. The existing recording ends in a `BrandMPN`
 >    validation failure. See `PRODUCTION_PLAN.md` §4.

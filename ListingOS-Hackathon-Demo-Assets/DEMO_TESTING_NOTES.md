@@ -19,11 +19,11 @@ The test assets are in `product-image-sets/`. The source photos are desktop prod
 | # | Product set | Draft result | Confidence | Category / condition | Pricing evidence | Result / finding |
 |---:|---|---|---:|---|---|---|
 | 1 | Compact Canon instant camera | `fbb578a1-f5bc-428a-9e44-a092ba1fae54`, `ready` | 0.90 | Digital Cameras / Used | $32.50 balanced, 8 comps | Strong draft. Correctly called out unconfirmed battery, film, power, and function. |
-| 2 | White compact camera | `d7be1e0c-6b80-44e2-a7e4-4d5f504dfc0e`, `ready` | 0.76 | UI showed Digital Cameras; payload category guess was Straps & Hand Grips / Used | $135.22, 8 weak comps; auction mode in payload | P1 category reconciliation issue. The UI and persisted AI category disagree and must converge before auto-publish. |
+| 2 | White compact camera | `d7be1e0c-6b80-44e2-a7e4-4d5f504dfc0e`, `ready` | 0.76 | UI showed Digital Cameras; payload category guess was Straps & Hand Grips / Used | $135.22, 8 weak comps; auction mode in payload | P1 category reconciliation issue. The UI and persisted AI category disagree and must converge before publish. |
 | 3 | Limitless book harness run | `75e248a0-1b4a-4c80-9599-88d43b14c572`, `needs_input` | 0.18 | Misrouted to Every Other Thing / Used | $0, 0 comps | Safe failure. The picker had not indexed the intended desktop photos, so prior camera photos were selected; malformed AI output was blocked rather than published. |
 | 4 | Only Mostly Devastated paperback | `e39722a1-4f95-45f9-8e15-7fc31e0fb672`, `ready` | 0.86 | Books / Used - Good | $14.70, 8 comps | Strong book draft with usable title, description, and category. |
 | 5 | Why Machines Learn book | `486f27e7-a725-4e9b-821a-43ceec7a496e`, `ready` | 0.78 | Textbooks / Used | $8.27, 8 comps | Usable draft; category is plausible but should remain seller-editable. |
-| 6 | White USB-C adapter | `ce9fa02b-b65d-4efd-8a6f-fa62d4b6149c`, `needs_input` | 0.42 | Cables & Adapters / Used | $9.50, 8 comps | Correct review gate. Brand, model, compatibility, and included accessories were not reliable enough to auto-publish. |
+| 6 | White USB-C adapter | `ce9fa02b-b65d-4efd-8a6f-fa62d4b6149c`, `needs_input` | 0.42 | Cables & Adapters / Used | $9.50, 8 comps | Correct review gate. Brand, model, compatibility, and included accessories were not reliable enough to publish without review. |
 | 7 | 2023 Pokemon Wartortle PSA 10 | `b5d2a162-2fb8-48e9-86ab-0c616d98d641`, `ready` | 0.87 | CCG Individual Cards / Graded - PSA Gem Mint 10 | $125, 3 comps | Strong card identity including year, set, number, and grade. Only three comps means seller review remains appropriate for pricing. |
 | 8 | 2022 Pokemon GO Pikachu PSA 8 | `289d7d04-e1dd-4e3c-9ce4-e770a50dd33c`, `needs_input` | 0.72 | CCG Individual Cards / Graded | $0, 0 exact comps | Safe pricing lock. The app extracted grade 8, cert `1243182729`, set, number, and year but did not invent a price when exact comps were unavailable. The UI must show `pricing unavailable`, never a publishable `$0`. |
 | 9 | Black leather wallet | `78213fd1-f06e-4fe3-9db1-e5347e631bc6`, `ready` | 0.78 | Wallets / Pre-owned | $16.50, 8 comps | Usable generic-product draft with conservative unbranded language. |
@@ -45,7 +45,11 @@ Evidence: `screenshots/qa-attempts/queue-more-sheet-fixed.png` (local-only QA hi
 
 ### Open P1: category reconciliation
 
-The white camera run displayed `Digital Cameras` in the review flow while the persisted payload category guess was `Straps & Hand Grips`. Before auto-publish, the backend should validate the final category against the generated specifics and reject or repair contradictory category sources. The seller must see one canonical category.
+The white camera run displayed `Digital Cameras` in the review flow while the persisted
+payload category guess was `Straps & Hand Grips`. Before any publish, the backend should
+validate the final category against the generated specifics and reject or repair
+contradictory category sources. The current mobile flow stops at review and requires an
+explicit seller publish action; this defect is another reason to keep that boundary.
 
 ### Open P1: duplicate draft idempotency
 
@@ -82,9 +86,14 @@ This section replaces an earlier claim that a live publish "passed in the verifi
 
 **What is true:** the product publishes real fixed-price listings. Inventory item, offer, and publish calls are implemented, the production Worker runs with `EBAY_USE_SANDBOX=false`, and published D1 attempts contain real listing and offer IDs. `../docs/CLAIMS.md` rates this High confidence and approves it for public use.
 
-**What is missing:** footage of a successful publish. The continuous demo recording ends in an eBay `BrandMPN` validation failure — recorded honestly in [`notes/devpost-android-cut-qa.md`](notes/devpost-android-cut-qa.md) rather than edited around.
+**What was missing from this July 18 sprint:** footage of a successful publish. The
+continuous sprint recording ends in an eBay `BrandMPN` validation failure — recorded
+honestly in [`notes/devpost-android-cut-qa.md`](notes/devpost-android-cut-qa.md) rather than
+edited around. Later submission evidence is documented separately; do not treat this dated
+matrix as the current video-status source.
 
-The distinction matters because `DEMO_VIDEO_SCRIPT_V2.md` opens on **REAL LISTING · REAL ACCOUNT** and narrates a successful publish at 2:00–2:10. The capability claim is defensible; the footage to support it does not yet exist. Resolution paths are in [`PRODUCTION_PLAN.md`](PRODUCTION_PLAN.md) §4.
+The capability claim is defensible, but this recording alone does not prove a successful
+publish. The current submission-video state lives in [`final-renders/README.md`](final-renders/README.md).
 
 ## Evidence index
 

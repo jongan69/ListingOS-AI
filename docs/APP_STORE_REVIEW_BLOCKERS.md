@@ -4,10 +4,14 @@
 
 Clear all required metadata and listing fields using repository-backed values so the app can move from `Unable to Add for Review` to a valid submission state.
 
-## Current status snapshot (2026-07-20)
+## Current status snapshot (2026-07-21)
 
-- Blockers remain as listed if App Store Connect metadata is still missing in the live form.
-- Support URL and privacy URL should use the Worker paths (`/app-support`, `/privacy`) while `listingos.expo.app` store-facing routes continue to return `404` in this deployed-check snapshot.
+- The public TestFlight invite resolves to `Join the ListingOS AI beta`.
+- The Worker support and privacy URLs and `https://listingos.expo.app` each return HTTP 200.
+- App Store Connect form state was not verified in this audit. Treat every dashboard-only
+  item below as unconfirmed until checked by the account owner.
+- Store submission is not on the hackathon critical path. Do not let dashboard cleanup
+  preempt Proof Mode deployment, video replacement, or the final Devpost check.
 
 ## Current App Store Connect blockers
 

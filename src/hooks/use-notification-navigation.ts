@@ -2,10 +2,14 @@ import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 import { useEffect } from "react";
 
+import { configurePublishNotificationHandling } from "@/lib/notifications";
+
 const handledNotificationIds = new Set<string>();
 
 export function useNotificationNavigation() {
   useEffect(() => {
+    configurePublishNotificationHandling();
+
     function openNotification(notification: Notifications.Notification) {
       const identifier = notification.request.identifier;
       if (handledNotificationIds.has(identifier)) return;

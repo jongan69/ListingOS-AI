@@ -9,12 +9,13 @@ not application runtime behavior.
 
 ## Start Here
 
-1. **[`PRODUCTION_PLAN.md`](PRODUCTION_PLAN.md)** — the two-track model, beat map, open
-   blockers, and remaining shot list. Read this first; it organizes everything else.
-2. **[`DEMO_VIDEO_SCRIPT_V2.md`](DEMO_VIDEO_SCRIPT_V2.md)** — the current script:
-   narration, on-screen text, timing, and compliance self-check.
-3. **[`DEMO_TESTING_NOTES.md`](DEMO_TESTING_NOTES.md)** — device QA and the test matrix
+1. **[`final-renders/README.md`](final-renders/README.md)** — the intended 2:30 YouTube
+   replacement, checksum, media QA, and external handoff.
+2. **[`DEMO_TESTING_NOTES.md`](DEMO_TESTING_NOTES.md)** — device QA and the test matrix
    behind every number quoted on screen.
+3. **[`PRODUCTION_PLAN.md`](PRODUCTION_PLAN.md)** and
+   **[`DEMO_VIDEO_SCRIPT_V2.md`](DEMO_VIDEO_SCRIPT_V2.md)** — pre-publication planning
+   records. They are no longer the current submission state.
 4. **[`notes/README.md`](notes/README.md)** — QA evidence and archived planning history.
 
 Before publishing, clear the gates in [`../docs/SUBMISSION_CHECKLIST.md`](../docs/SUBMISSION_CHECKLIST.md)
@@ -22,20 +23,21 @@ and [`../docs/CLAIMS.md`](../docs/CLAIMS.md).
 
 ## Current State
 
-The video is **in pre-production.** There is no current master render.
+As verified on 2026-07-21, Devpost embeds the public YouTube video
+`I67o7B2JfYQ`. YouTube reports that upload as exactly **3:00**. The polished presentation
+ends on its `Thank you` frame at 2:30, but an unfinished duplicate/raw take then starts and
+runs to the end.
 
-The demo is built as two tracks: live-action evidence (Track A) with automated overlay
-material layered on top (Track B). `PRODUCTION_PLAN.md` §1 defines how they divide.
+A clean **2:30** replacement is present locally at
+`final-renders/listingos-openai-build-week-final-2m30s.mp4`. It preserves the complete
+polished presentation and removes only the accidental tail. Its exact verification data is
+tracked in [`final-renders/README.md`](final-renders/README.md).
 
-An earlier fully-automated approach produced Remotion and Rotato masters. Those were
-rendered while the product was incomplete and the required footage did not exist; they
-are superseded and retained only as tooling references. See
-[`archive/automated-pass/`](archive/automated-pass/).
+**External gate:** upload the 2:30 file publicly, verify it signed out, then replace the
+Devpost video URL. Keep the current upload until the replacement embed is confirmed.
 
-**Open blocker:** the strongest beats in the script depend on footage of a successful
-eBay publish, and the existing recording ends in a `BrandMPN` validation failure.
-`PRODUCTION_PLAN.md` §4 covers the reconciliation and the three ways forward. Nothing
-in the cold open should be shot until it is resolved.
+The old two-track plan and automated masters remain as provenance only. They do not
+describe the currently published video.
 
 ## Asset Status
 
@@ -53,21 +55,21 @@ not mean the file was never produced.
 | `thumbnails/` | `listingos-horizontal-demo-thumbnail.jpg` | Tracked | Yes |
 | `archive/` | Superseded plans and automated-pass records | Tracked | Yes |
 | `raw-screen-recordings/` | Device recordings | Outputs ignored | Empty |
-| `final-renders/` | Assembled videos | Outputs ignored | Empty |
+| `final-renders/` | Intended 2:30 replacement plus tracked handoff metadata | Videos ignored; metadata tracked | Yes |
 | `rotato-exports/` | Device-mockup renders | Outputs ignored | Empty |
 
 Every Track B asset above is regenerable from checked-in source. Track A material —
 device recordings, the published-listing capture, on-camera footage — is not.
 `PRODUCTION_PLAN.md` §5 has the regeneration table.
 
-## Workflow
+## Submission Workflow
 
-1. Resolve the publish blocker (`PRODUCTION_PLAN.md` §4).
-2. Decide the on-camera slots (`PRODUCTION_PLAN.md` §2) — this gates the shoot.
-3. Capture Track A per the shot list (`PRODUCTION_PLAN.md` §6).
-4. Build Track B overlays from the checked-in composition and fixture sources.
-5. Assemble against the beat map (`PRODUCTION_PLAN.md` §3).
-6. Review for duration, audio, privacy, truthful claims, and incognito playback.
+1. Finish code and deployment verification.
+2. Upload the intended 2:30 replacement described in `final-renders/README.md`.
+3. Confirm public, signed-out playback and the processed duration.
+4. Replace the Devpost video URL and re-open the public project page.
+5. Confirm the description qualifies recorded-run timing and Proof Mode fixture data.
+6. Confirm music and third-party visual rights before final lock.
 
 ## Safety Rules
 

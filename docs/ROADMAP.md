@@ -34,19 +34,23 @@ listing layer where a seller reviews an item once and routes it to several desti
 - Category, item specifics, and active comparables come from eBay Taxonomy and Browse.
 - `marketplaceId` is `EBAY_US` throughout.
 
-### In the codebase, not enabled
+### Experimental or in the codebase, not launch-ready
 
 - **Auction mode** appears in the shared contracts, but no verified Trading API publish
   adapter is active. Fixed-price is the only proven path.
 - **OfferUp** local asking-price signals are queried as supplementary seller context. This
   is read-only market context, not a publish destination.
+- **ListingOS Market public-listing beta** has a public feed/detail surface and a
+  seller-controlled beta publish path. Buyer inquiry is controlled-demo-only; email
+  delivery and the native seller inbox/reply flow are not shipped. eBay remains the only
+  verified external publish channel.
 
 ### Next
 
-- **ListingOS Market** — a first-party channel so a seller can publish to ListingOS, eBay,
-  or both from the same reviewed draft. Planned scope: first-party sign-in independent of
-  eBay OAuth, destination selection on a reviewed draft, a public listing feed and
-  shareable detail pages, and a text-only buyer inquiry flow with a seller inbox.
+- **Complete ListingOS Market** — finish the first-party channel so a seller can publish to
+  ListingOS, eBay, or both from the same reviewed draft. Remaining scope includes reliable
+  first-party identity, verified email delivery, destination selection, abuse controls,
+  and a tested buyer inquiry flow with a native seller inbox and reply path.
   Explicitly **not** a checkout marketplace: no payments, escrow, shipping, identity
   guarantees, or transaction mediation.
 - **Additional destinations** behind the same channel-adapter interface.

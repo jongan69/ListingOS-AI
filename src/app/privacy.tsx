@@ -46,6 +46,12 @@ export default function PrivacyRoute() {
           <Text selectable style={styles.list}>
             • Readiness and policy data needed to guide publish checks
           </Text>
+          <Text selectable style={styles.list}>
+            • Listing snapshots a seller chooses to publish to the ListingOS Market beta
+          </Text>
+          <Text selectable style={styles.list}>
+            • Buyer email, verification-session state, inquiry notes, and report or block requests submitted through the Market beta
+          </Text>
 
           <Text selectable style={styles.sectionTitle}>Storage</Text>
           <Text selectable style={styles.body}>
@@ -58,10 +64,19 @@ export default function PrivacyRoute() {
             • Drafts, jobs, publish attempts, and listing references are stored in Cloudflare D1.
           </Text>
           <Text selectable style={styles.list}>
+            • Public Market listing snapshots, buyer email and verification sessions, inquiry messages, reports, and blocks are stored in Cloudflare D1.
+          </Text>
+          <Text selectable style={styles.list}>
             • OAuth state and short-lived session cache are stored in Cloudflare KV.
           </Text>
           <Text selectable style={styles.body}>
             We do not store OAuth tokens, private keys, or seller secrets in app UI fields.
+          </Text>
+
+          <Text selectable style={styles.sectionTitle}>ListingOS Market beta</Text>
+          <Text selectable style={styles.body}>
+            A Market listing is public by design. Its title, description, price, category, location label, and listing photos may be visible without signing in.
+            Buyer inquiry records are not displayed in the public listing feed, but their email, verification state, note, and related safety records are stored to operate and protect the beta.
           </Text>
 
           <Text selectable style={styles.sectionTitle}>AI and technical processing</Text>

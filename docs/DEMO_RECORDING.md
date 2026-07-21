@@ -1,17 +1,17 @@
 # Demo Recording Checklist
 
-Device-capture mechanics for the demo video. **Story, shot list, and narration are not
-here** — they live in the demo workbench:
-
-- Script: [`ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md`](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md)
-- Production plan and shot list: [`ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md)
-
-This file covers only how to get clean footage off the device.
+This is the capture and upload safety checklist. The current submission handoff is
+[`final-renders/README.md`](../ListingOS-Hackathon-Demo-Assets/final-renders/README.md);
+the old script and production plan are retained only as historical planning records.
 
 ## Requirement
 
-Public YouTube video under 3:00 with audio explaining what was built, how Codex was used,
-and how GPT-5.6 was used. Current script targets 2:53.
+The Official Rules say the video should be **less than three minutes**, with audio explaining
+what was built, how Codex was used, and how GPT-5.6 was used.
+
+The current public upload is exactly 3:00 and contains an accidental second take after the
+polished ending. The intended replacement is a verified 2:30 H.264/AAC file described in
+the final-render handoff above. Do not record a new demo unless that replacement is unusable.
 
 ## Before recording
 
@@ -46,10 +46,16 @@ Record narration separately and combine in the edit. `raw-screen-recordings/` is
 
 - Do not create duplicate production eBay listings while recording.
 - If demonstrating publish, use a deliberate test item or an already-published result.
-- See [`PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md) §4 —
-  the publish-footage blocker is unresolved and gates the cold open.
+- Proof Mode must label review/pricing data as illustrative and historical publish metadata
+  as evidence from a separate verified run.
 
 ## Upload
 
-Upload to YouTube as public or unlisted, verify playback in an incognito window, then add
-the URL to Devpost. Disclose any time-compression of queue processing in the description.
+1. Upload `ListingOS-Hackathon-Demo-Assets/final-renders/listingos-openai-build-week-final-2m30s.mp4`
+   to YouTube as **public**.
+2. Wait for HD processing and verify duration, audio, captions, and the final frame signed out.
+3. Add the replacement URL to Devpost, then verify the embedded player in a private window.
+4. Keep the prior upload until the replacement embed works.
+5. Qualify under-one-minute timing as one recorded run, disclose fixture-backed Proof Mode,
+   and state that ListingOS is independent and not endorsed by eBay.
+6. Confirm music and third-party visual rights before final lock.

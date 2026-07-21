@@ -12,6 +12,7 @@ import {
   MarketFeedQuerySchema,
   MarketInquiryStartSchema,
   MarketMessageSchema,
+  MarketPublishRequestSchema,
   MarketReportRequestSchema,
   MarketThreadSchema,
   PublicMarketListingSchema,
@@ -19,8 +20,11 @@ import {
   RevenueCatWebhookTraceResponseSchema,
   CameraSessionCreateInputSchema,
   CameraSessionSchema,
+  CaptureSourceSchema,
+  DraftJobsCreateInputSchema,
   DraftJobSchema,
   DraftJobStatusSchema,
+  DraftPatchInputSchema,
   DraftPayloadSchema,
   ImageEnhancementSchema,
   ListingModeSchema,
@@ -36,7 +40,10 @@ import {
   SessionEmailVerifySchema,
   SessionStateSchema,
   SessionUserSchema,
+  SupportedUploadContentTypeSchema,
+  UploadBatchCreateInputSchema,
   UploadBatchSchema,
+  UploadInitInputSchema,
   UploadInitResponseSchema,
   VisionFrameContextSchema,
   type BlockerType,
@@ -73,6 +80,10 @@ const EBAY_SELLER_REQUEST_TIMEOUT_MS = 15_000;
 const EBAY_MEDIA_INGEST_TIMEOUT_MS = 12_000;
 const EXTERNAL_MARKET_LOOKUP_TIMEOUT_MS = 5_000;
 const REVENUECAT_REST_TIMEOUT_MS = 5_000;
+const REVENUECAT_WEBHOOK_SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
+const MAX_JSON_BODY_BYTES = 256 * 1024;
+const MAX_WEBHOOK_BODY_BYTES = 1024 * 1024;
+const MAX_MARKET_REPORT_DETAILS_BYTES = 8 * 1024;
 /**
  * The entitlement identifiers this app understands. v1 keys these by object
  * name, v2 by `lookup_key` — both resolve to these same strings, so the two
@@ -107,7 +118,7 @@ type RevenueCatWebhookSignatureCheck = {
   checked: boolean;
   provided: boolean;
   valid: boolean;
-  status: "ok" | "missing_signature" | "missing_signing_secret" | "invalid_format" | "signature_mismatch";
+  status: "ok" | "not_configured" | "missing_signature" | "invalid_format" | "stale_timestamp" | "signature_mismatch";
 };
 
 type WorkerLogLevel = "info" | "warn" | "error";
@@ -141,9 +152,9 @@ function firstNonEmptyString(values: unknown[]) {
 function normalizeWebhookEventType(value: string) {
   return value
     .trim()
-    .toLowerCase()
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/[.\-\s]+/g, "_");
+    .replace(/[.\-\s]+/g, "_")
+    .toLowerCase();
 }
 
 function extractRevenueCatEventId(event: Record<string, unknown>, eventPayload: Record<string, unknown> | null) {
@@ -154,36 +165,30 @@ function extractRevenueCatEventId(event: Record<string, unknown>, eventPayload: 
     eventPayload?.id,
     eventPayload?.eventId,
     eventPayload?.event_id,
-    event.original_transaction_id,
-    event.originalTransactionId,
   ];
   return firstNonEmptyString(candidates);
 }
 
 function parseWebhookSignatureHeader(value: string | undefined) {
   if (!value) return null;
-  const headerParts = value.split(",").map((part) => part.trim()).filter(Boolean);
-  for (const part of headerParts) {
-    const [name, ...rest] = part.split("=");
-    const candidate = rest.length > 0 ? rest.join("=").trim() : part.trim();
-    if (candidate.length === 0) continue;
-    const key = (name ?? "").toLowerCase();
-    if (key === "v1" || key === "sha256" || key === "signature" || key === "revenuecat" || part === candidate) {
-      return candidate;
-    }
+  const parts = new Map<string, string>();
+  for (const part of value.split(",")) {
+    const separator = part.indexOf("=");
+    if (separator <= 0) continue;
+    const key = part.slice(0, separator).trim().toLowerCase();
+    const candidate = part.slice(separator + 1).trim();
+    if (key && candidate) parts.set(key, candidate);
   }
-  return headerParts[0] ?? null;
+  const timestamp = parts.get("t") ?? "";
+  const signature = parts.get("v1") ?? "";
+  if (!/^\d+$/.test(timestamp) || !/^[a-f0-9]{64}$/i.test(signature)) return null;
+  return { timestamp, signature };
 }
 
 function bytesToHex(bytes: ArrayBuffer) {
   return [...new Uint8Array(bytes)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
-}
-
-function bytesToBase64(bytes: ArrayBuffer) {
-  const binary = String.fromCharCode(...new Uint8Array(bytes));
-  return btoa(binary);
 }
 
 function secureStringEquals(a: string, b: string) {
@@ -197,17 +202,29 @@ function secureStringEquals(a: string, b: string) {
   return diff === 0;
 }
 
-async function verifyWebhookSignature(rawBody: string, signatureHeader: string | undefined, secret: string | undefined): Promise<RevenueCatWebhookSignatureCheck> {
-  const signature = parseWebhookSignatureHeader(signatureHeader);
-  if (!signatureHeader) {
+async function verifyWebhookSignature(
+  rawBody: string,
+  signatureHeader: string | undefined,
+  signingSecret: string | undefined,
+): Promise<RevenueCatWebhookSignatureCheck> {
+  if (!signingSecret?.trim()) {
     return {
       checked: false,
+      provided: Boolean(signatureHeader),
+      valid: true,
+      status: "not_configured",
+    };
+  }
+  if (!signatureHeader) {
+    return {
+      checked: true,
       provided: false,
       valid: false,
       status: "missing_signature",
     };
   }
-  if (!signature) {
+  const parsed = parseWebhookSignatureHeader(signatureHeader);
+  if (!parsed) {
     return {
       checked: true,
       provided: true,
@@ -215,29 +232,27 @@ async function verifyWebhookSignature(rawBody: string, signatureHeader: string |
       status: "invalid_format",
     };
   }
-  if (!secret) {
+  const timestampSeconds = Number(parsed.timestamp);
+  if (!Number.isSafeInteger(timestampSeconds)
+    || Math.abs(Math.floor(Date.now() / 1000) - timestampSeconds) > REVENUECAT_WEBHOOK_SIGNATURE_TOLERANCE_SECONDS) {
     return {
       checked: true,
       provided: true,
       valid: false,
-      status: "missing_signing_secret",
+      status: "stale_timestamp",
     };
   }
   const signingKey = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(secret),
+    new TextEncoder().encode(signingSecret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
   );
-  const digest = await crypto.subtle.sign("HMAC", signingKey, new TextEncoder().encode(rawBody));
+  const signedPayload = `${parsed.timestamp}.${rawBody}`;
+  const digest = await crypto.subtle.sign("HMAC", signingKey, new TextEncoder().encode(signedPayload));
   const expectedHex = bytesToHex(digest);
-  const expectedBase64 = bytesToBase64(digest);
-  const signatureTrimmed = signature.trim();
-  const valid = secureStringEquals(signatureTrimmed.toLowerCase(), expectedHex.toLowerCase())
-    || secureStringEquals(signatureTrimmed, expectedBase64)
-    || secureStringEquals(signatureTrimmed, expectedHex.toLowerCase())
-    || secureStringEquals(signatureTrimmed.toUpperCase(), expectedHex.toUpperCase());
+  const valid = secureStringEquals(parsed.signature.toLowerCase(), expectedHex);
   return {
     checked: true,
     provided: true,
@@ -440,13 +455,12 @@ app.use("*", cors({
 }));
 
 app.use("/api/*", async (c, next) => {
-  const authorization = c.req.header("Authorization");
-  if (!authorization?.startsWith("Bearer ")) {
+  const token = bearerToken(c.req.header("Authorization"));
+  if (!token) {
     c.set("session", null);
     c.set("seller", null);
     return next();
   }
-  const token = authorization.replace("Bearer ", "").trim();
   const session = await c.env.DB.prepare(
     "SELECT id, user_id, seller_account_id, expires_at FROM app_sessions WHERE id = ?",
   ).bind(token).first<SessionRecord>();
@@ -477,7 +491,9 @@ app.get("/health", async (c) => {
     // when the REST secret or a signed webhook can verify it server-side.
     revenueCatSecretConfigured: Boolean(c.env.REVENUECAT_SECRET_API_KEY?.trim()),
     revenueCatWebhookConfigured: Boolean(c.env.REVENUECAT_WEBHOOK_AUTH_TOKEN?.trim()),
+    revenueCatWebhookSigningConfigured: Boolean(c.env.REVENUECAT_WEBHOOK_SIGNING_SECRET?.trim()),
     billingEnforcementMode: c.env.BILLING_ENFORCEMENT_MODE === "enforce" ? "enforce" : "observe",
+    marketDemoEmailVerificationConfigured: isMarketDemoVerificationConfigured(c.env),
   });
 });
 
@@ -568,6 +584,7 @@ app.get("/privacy", (c) => c.html(renderMarketingHtml(
   [
     "ListingOS uses eBay OAuth to connect a seller account, product photos selected by the seller, listing drafts generated from those photos, and seller readiness data required by eBay.",
     "Photos are stored in Cloudflare R2 for listing generation and publishing. Drafts, jobs, publish attempts, and listing references are stored in Cloudflare D1. OAuth state and short-lived session cache are stored in Cloudflare KV.",
+    "The optional ListingOS Market beta stores a public listing snapshot plus buyer email identities, verification sessions, inquiry messages, reports, and buyer-requested blocks in Cloudflare D1. Buyer verification is disabled unless a private controlled-demo code is configured; this build does not claim email delivery or a seller inbox.",
     "eBay tokens are stored server-side and are not embedded in the mobile app. The backend sends product photos and marketplace context to the OpenAI Responses API to generate structured listing recommendations.",
     "Publishing with production credentials can create a live eBay listing. ListingOS is an independent seller tool and is not affiliated with or endorsed by eBay.",
   ],
@@ -614,16 +631,20 @@ app.post("/api/session/ebay/connect", async (c) => {
 
 app.get("/api/session/pending/:authSessionId", async (c) => {
   const authSession = await c.env.DB.prepare(
-    "SELECT id, status, error_message, session_token, seller_account_id FROM auth_sessions WHERE id = ?",
+    "SELECT id, status, error_message, session_token, seller_account_id, expires_at FROM auth_sessions WHERE id = ?",
   ).bind(c.req.param("authSessionId")).first<{
     id: string;
     status: string;
     error_message: string | null;
     session_token: string | null;
     seller_account_id: string | null;
+    expires_at: string;
   }>();
   if (!authSession) {
     return c.json({ error: "Auth session not found." }, 404);
+  }
+  if (Date.parse(authSession.expires_at) <= Date.now()) {
+    return c.json({ error: "Auth session expired. Start eBay sign-in again." }, 410);
   }
   let sellerUsername: string | null = null;
   if (authSession.seller_account_id) {
@@ -661,16 +682,22 @@ app.get("/api/session/ebay/callback", async (c) => {
       400,
     );
   }
+  // OAuth state is single-use. Consume it before processing the callback so a
+  // browser refresh cannot replay the authorization code against this session.
+  await c.env.SESSION_KV.delete(`oauth-state:${state}`);
   if (error) {
+    const publicError = error === "access_denied"
+      ? "eBay sign-in was canceled."
+      : "eBay sign-in could not be completed.";
     const callbackState = { authSessionId, status: "failed" as const };
     const fallbackUrl = buildWebCallbackRedirectUrl(c.env.PUBLIC_WEB_APP_URL, callbackState);
     await c.env.DB.prepare(
       "UPDATE auth_sessions SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?",
-    ).bind(error, new Date().toISOString(), authSessionId).run();
+    ).bind(publicError, new Date().toISOString(), authSessionId).run();
     return c.html(
       renderCallbackHtml(
         "eBay sign-in cancelled.",
-        error,
+        publicError,
         callbackState,
         isMobileWebview,
         fallbackUrl,
@@ -681,6 +708,9 @@ app.get("/api/session/ebay/callback", async (c) => {
   if (!code) {
     const callbackState = { authSessionId, status: "failed" as const };
     const fallbackUrl = buildWebCallbackRedirectUrl(c.env.PUBLIC_WEB_APP_URL, callbackState);
+    await c.env.DB.prepare(
+      "UPDATE auth_sessions SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?",
+    ).bind("The eBay callback did not include an authorization code.", new Date().toISOString(), authSessionId).run();
     return c.html(
       renderCallbackHtml(
         "Missing eBay code.",
@@ -732,15 +762,20 @@ app.get("/api/session/ebay/callback", async (c) => {
     );
   } catch (callbackError) {
     const message = callbackError instanceof Error ? callbackError.message : String(callbackError);
+    const publicMessage = "eBay sign-in could not be completed. Try again from ListingOS.";
+    logWorkerItem("error", "oauth.ebay.callback.failed", {}, {
+      authSessionId,
+      error: simplifyEbayError(message),
+    });
     const callbackState = { authSessionId, status: "failed" as const };
     const fallbackUrl = buildWebCallbackRedirectUrl(c.env.PUBLIC_WEB_APP_URL, callbackState);
     await c.env.DB.prepare(
       "UPDATE auth_sessions SET status = 'failed', error_message = ?, updated_at = ? WHERE id = ?",
-    ).bind(message, new Date().toISOString(), authSessionId).run();
+    ).bind(publicMessage, new Date().toISOString(), authSessionId).run();
     return c.html(
       renderCallbackHtml(
         "eBay sign-in failed.",
-        message,
+        publicMessage,
         callbackState,
         isMobileWebview,
         fallbackUrl,
@@ -769,31 +804,55 @@ app.get("/api/session/me", async (c) => {
 });
 
 app.post("/api/session/email/start", async (c) => {
-  const body = SessionEmailStartSchema.parse(await c.req.json().catch(() => ({})));
+  const verificationCode = marketDemoVerificationCode(c.env);
+  if (!verificationCode) {
+    return c.json({ error: "Buyer email verification is unavailable." }, 503);
+  }
+  const body = SessionEmailStartSchema.parse(await readJsonRequest(c));
+  await enforceMarketRateLimit(c.env, await privacySafeRateLimitKey(body.email), "email-start", 5);
   const now = new Date().toISOString();
-  const buyerId = crypto.randomUUID();
   const sessionToken = crypto.randomUUID();
-  const identityId = crypto.randomUUID();
-  await c.env.DB.batch([
-    c.env.DB.prepare(
-      "INSERT INTO market_buyer_identities (id, email, verified_at, created_at, updated_at) VALUES (?, ?, NULL, ?, ?) ON CONFLICT(email) DO UPDATE SET updated_at = excluded.updated_at",
-    ).bind(identityId, body.email, now, now),
-    c.env.DB.prepare(
-      "INSERT INTO market_buyer_sessions (id, buyer_identity_id, email, session_token, verified, created_at, expires_at) VALUES (?, ?, ?, ?, 0, ?, ?)",
-    ).bind(crypto.randomUUID(), identityId, body.email, sessionToken, now, new Date(Date.now() + 15 * 60 * 1000).toISOString()),
-  ]);
-  return c.json({ ok: true, sessionToken, email: body.email, buyerId });
+  const sessionTokenHash = await sha256Hex(sessionToken);
+  await c.env.DB.prepare(
+    "INSERT INTO market_buyer_identities (id, email, verified_at, created_at, updated_at) VALUES (?, ?, NULL, ?, ?) ON CONFLICT(email) DO UPDATE SET updated_at = excluded.updated_at",
+  ).bind(crypto.randomUUID(), body.email, now, now).run();
+  const identity = await c.env.DB.prepare(
+    "SELECT id FROM market_buyer_identities WHERE email = ? LIMIT 1",
+  ).bind(body.email).first<{ id: string }>();
+  if (!identity) {
+    throw new Error("Buyer identity could not be created.");
+  }
+  await c.env.DB.prepare(
+    "INSERT INTO market_buyer_sessions (id, buyer_identity_id, email, session_token, verified, created_at, expires_at) VALUES (?, ?, ?, ?, 0, ?, ?)",
+  ).bind(
+    crypto.randomUUID(),
+    identity.id,
+    body.email,
+    sessionTokenHash,
+    now,
+    new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+  ).run();
+  return c.json({ ok: true, sessionToken, email: body.email, buyerId: identity.id, verificationMode: "configured_demo" });
 });
 
 app.post("/api/session/email/verify", async (c) => {
-  const body = SessionEmailVerifySchema.parse(await c.req.json().catch(() => ({})));
+  const verificationCode = marketDemoVerificationCode(c.env);
+  if (!verificationCode) {
+    return c.json({ error: "Buyer email verification is unavailable." }, 503);
+  }
+  const body = SessionEmailVerifySchema.parse(await readJsonRequest(c));
+  const sessionTokenHash = await sha256Hex(body.sessionToken);
+  await enforceMarketRateLimit(c.env, sessionTokenHash, "email-verify", 8);
   const session = await c.env.DB.prepare(
-    "SELECT id, buyer_identity_id, email, session_token, verified FROM market_buyer_sessions WHERE session_token = ? AND email = ?",
-  ).bind(body.sessionToken, body.email).first<{ id: string; buyer_identity_id: string; email: string; session_token: string; verified: number }>();
+    "SELECT id, buyer_identity_id, email, session_token, verified, expires_at FROM market_buyer_sessions WHERE session_token = ? AND email = ?",
+  ).bind(sessionTokenHash, body.email).first<{ id: string; buyer_identity_id: string; email: string; session_token: string; verified: number; expires_at: string }>();
   if (!session) {
     return c.json({ error: "Verification session not found." }, 404);
   }
-  if (body.verificationCode !== "111111") {
+  if (Date.parse(session.expires_at) <= Date.now()) {
+    return c.json({ error: "Verification session expired." }, 410);
+  }
+  if (!secureStringEquals(body.verificationCode, verificationCode)) {
     return c.json({ error: "Invalid verification code." }, 400);
   }
   const now = new Date().toISOString();
@@ -814,10 +873,13 @@ app.post("/api/session/email/verify", async (c) => {
 });
 
 app.post("/api/session/logout", async (c) => {
-  const authorization = c.req.header("Authorization") ?? "";
-  const sessionToken = authorization.replace(/^Bearer\s+/i, "").trim();
+  const sessionToken = bearerToken(c.req.header("Authorization"));
   if (sessionToken) {
-    await c.env.DB.prepare("DELETE FROM market_buyer_sessions WHERE session_token = ?").bind(sessionToken).run();
+    const sessionTokenHash = await sha256Hex(sessionToken);
+    await c.env.DB.batch([
+      c.env.DB.prepare("DELETE FROM app_sessions WHERE id = ?").bind(sessionToken),
+      c.env.DB.prepare("DELETE FROM market_buyer_sessions WHERE session_token = ?").bind(sessionTokenHash),
+    ]);
   }
   return c.json({ ok: true });
 });
@@ -829,14 +891,14 @@ app.get("/api/billing/summary", requireSession, async (c) => {
 
 app.post("/api/billing/sync", requireSession, async (c) => {
   const seller = c.get("seller")!;
-  const body = BillingSyncRequestSchema.parse(await c.req.json().catch(() => ({})));
+  const body = BillingSyncRequestSchema.parse(await readJsonRequest(c));
   await syncBillingProfile(c.env, seller.id, await resolveClientBillingSync(c.env, seller.id, body));
   return c.json(await getBillingSummary(c.env, seller.id));
 });
 
 app.post("/api/billing/events", requireSession, async (c) => {
   const seller = c.get("seller")!;
-  const event = BillingEventSchema.parse(await c.req.json().catch(() => ({})));
+  const event = BillingEventSchema.parse(await readJsonRequest(c));
   await recordAppEvent(c.env, seller.id, `billing.${event.eventName}`, {
     trigger: event.trigger ?? null,
     plan: event.plan ?? null,
@@ -847,18 +909,39 @@ app.post("/api/billing/events", requireSession, async (c) => {
 });
 
 app.post("/api/revenuecat/webhook", async (c) => {
-  const expectedToken = c.env.REVENUECAT_WEBHOOK_AUTH_TOKEN;
-  const expectedSecret = c.env.REVENUECAT_SECRET_API_KEY?.trim();
+  const expectedToken = c.env.REVENUECAT_WEBHOOK_AUTH_TOKEN?.trim();
+  const signingSecret = c.env.REVENUECAT_WEBHOOK_SIGNING_SECRET?.trim();
   const authorization = c.req.header("Authorization") ?? "";
   const signatureHeader = c.req.header("x-revenuecat-signature")
     ?? c.req.header("x-revenuecat-webhook-signature");
-  const token = authorization.replace(/^Bearer\s+/i, "").trim();
+  const token = bearerToken(authorization) ?? "";
   const receivedAt = new Date().toISOString();
+  if (!expectedToken) {
+    logWorkerItem("error", "billing.revenuecat_webhook.auth.config_error", {}, {
+      enforcementMode: billingEnforcementMode(c.env),
+      reason: "missing_token",
+    });
+    return c.json({ error: "RevenueCat webhook token is not configured." }, 503);
+  }
+  if (!secureStringEquals(token, expectedToken)) {
+    logWorkerItem("warn", "billing.revenuecat_webhook.auth.failed", {}, {
+      hasAuthHeader: Boolean(authorization),
+      receivedAt,
+    });
+    return c.json({ error: "Unauthorized." }, 401);
+  }
+  const contentLength = Number(c.req.header("Content-Length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_WEBHOOK_BODY_BYTES) {
+    return c.json({ error: "Webhook body is too large." }, 413);
+  }
   const rawBody = await c.req.text().catch(() => "");
+  if (new TextEncoder().encode(rawBody).byteLength > MAX_WEBHOOK_BODY_BYTES) {
+    return c.json({ error: "Webhook body is too large." }, 413);
+  }
   const body = parseJsonValue(rawBody);
   const event = asRecord(body) ?? {};
   const eventPayload = asRecord(event.event);
-  const signatureCheck = await verifyWebhookSignature(rawBody, signatureHeader, expectedSecret);
+  const signatureCheck = await verifyWebhookSignature(rawBody, signatureHeader, signingSecret);
   const envelopeType = eventPayload?.type ?? event?.type ?? event?.eventType;
   const rawEventType = stringOr(envelopeType, "unknown");
   const eventType = normalizeWebhookEventType(rawEventType);
@@ -899,7 +982,11 @@ app.post("/api/revenuecat/webhook", async (c) => {
     event?.storeProductId,
   ]);
   const eventTimestamp = toIsoTimestamp(
-    eventPayload?.timestamp ?? eventPayload?.event_timestamp ?? eventPayload?.event_ts ?? event?.timestamp,
+    eventPayload?.event_timestamp_ms
+      ?? eventPayload?.timestamp
+      ?? eventPayload?.event_timestamp
+      ?? eventPayload?.event_ts
+      ?? event?.timestamp,
     receivedAt,
   );
   const isPurchaseTransition = REVENUECAT_WEBHOOK_RELEVANT_EVENT_TYPES.has(eventType);
@@ -914,55 +1001,10 @@ app.post("/api/revenuecat/webhook", async (c) => {
     isPurchaseTransition,
     eventId: normalizedWebhookId,
     isReplay: false,
-    signatureVerified: signatureCheck.valid,
+    signatureVerified: signatureCheck.checked && signatureCheck.valid,
     signatureStatus: signatureCheck.status,
     eventName: "billing.revenuecat_webhook.event",
   };
-  if (!expectedToken && billingEnforcementMode(c.env) === "enforce") {
-    logWorkerItem("error", "billing.revenuecat_webhook.auth.config_error", {}, {
-      enforcementMode: billingEnforcementMode(c.env),
-      eventType,
-      appUserId,
-      customerId,
-    });
-    await safeRecordRevenueCatWebhookEvent(c.env, null, "billing.revenuecat_webhook.config", {
-      ...traceTemplate,
-      reason: "missing_token",
-      timestamp: receivedAt,
-    });
-    return c.json({ error: "RevenueCat webhook token is not configured." }, 503);
-  }
-  if (expectedToken && token !== expectedToken) {
-    logWorkerItem("warn", "billing.revenuecat_webhook.auth.failed", {}, {
-      hasAuthHeader: Boolean(authorization),
-      eventType,
-      appUserId,
-      customerId,
-      receivedAt,
-    });
-    await safeRecordRevenueCatWebhookEvent(c.env, null, "billing.revenuecat_webhook.auth", {
-      ...traceTemplate,
-      reason: "token_mismatch",
-      timestamp: receivedAt,
-    });
-    return c.json({ error: "Unauthorized." }, 401);
-  }
-  if (signatureCheck.status === "missing_signing_secret") {
-    logWorkerItem("error", "billing.revenuecat_webhook.auth.config_error", {}, {
-      enforcementMode: billingEnforcementMode(c.env),
-      eventType,
-      eventId: normalizedWebhookId,
-      appUserId,
-      customerId,
-      signatureStatus: signatureCheck.status,
-    });
-    await safeRecordRevenueCatWebhookEvent(c.env, null, "billing.revenuecat_webhook.config", {
-      ...traceTemplate,
-      reason: "missing_signing_secret",
-      timestamp: receivedAt,
-    });
-    return c.json({ error: "RevenueCat webhook signing secret is not configured." }, 503);
-  }
   if (!signatureCheck.valid) {
     logWorkerItem("warn", "billing.revenuecat_webhook.signature.failed", {}, {
       eventType,
@@ -979,6 +1021,9 @@ app.post("/api/revenuecat/webhook", async (c) => {
       timestamp: receivedAt,
     });
     return c.json({ error: "Unauthorized." }, 401);
+  }
+  if (!asRecord(body)) {
+    return c.json({ error: "Webhook body must be a JSON object." }, 400);
   }
   if (!appUserId) {
     logWorkerItem("warn", "billing.revenuecat_webhook.skipped", {}, {
@@ -1152,7 +1197,7 @@ app.get("/api/internal/revenuecat/webhook-traces", async (c) => {
 
 app.post("/api/devices/push-token", requireSession, async (c) => {
   const seller = c.get("seller")!;
-  const body = PushTokenRegistrationSchema.parse(await c.req.json().catch(() => ({})));
+  const body = PushTokenRegistrationSchema.parse(await readJsonRequest(c));
   const now = new Date().toISOString();
   await c.env.DB.prepare(
     `INSERT INTO device_push_tokens (id, seller_account_id, token, platform, device_name, status, created_at, updated_at)
@@ -1260,9 +1305,19 @@ app.post("/api/queue/:itemId/cancel", requireSession, async (c) => {
   }
   const now = new Date().toISOString();
   if (job.draft_id) {
-    await c.env.DB.prepare(
-      "UPDATE publish_attempts SET status = 'canceled', updated_at = ? WHERE draft_id = ? AND seller_account_id = ? AND status IN ('queued', 'publishing')",
-    ).bind(now, job.draft_id, seller.id).run();
+    const attempt = await c.env.DB.prepare(
+      "SELECT id, status FROM publish_attempts WHERE draft_id = ? AND seller_account_id = ? AND status IN ('queued', 'publishing') ORDER BY created_at DESC LIMIT 1",
+    ).bind(job.draft_id, seller.id).first<{ id: string; status: string }>();
+    if (!attempt) return c.json({ error: "There is no queued publish to cancel." }, 409);
+    if (attempt.status === "publishing") {
+      return c.json({ error: "eBay publishing has already started and can no longer be canceled safely." }, 409);
+    }
+    const canceled = await c.env.DB.prepare(
+      "UPDATE publish_attempts SET status = 'canceled', updated_at = ? WHERE id = ? AND seller_account_id = ? AND status = 'queued'",
+    ).bind(now, attempt.id, seller.id).run();
+    if ((canceled.meta.changes ?? 0) === 0) {
+      return c.json({ error: "eBay publishing started before cancellation could complete." }, 409);
+    }
     const draft = await loadDraft(c.env, job.draft_id, seller.id);
     if (draft) {
       const draftStatus = draft.blockers.length > 0
@@ -1277,6 +1332,9 @@ app.post("/api/queue/:itemId/cancel", requireSession, async (c) => {
       ).bind(draftStatus === "ready" ? "ready" : "needs_input", now, job.id, seller.id).run();
     }
   } else {
+    if (job.status !== "queued") {
+      return c.json({ error: "Draft generation has already started and can no longer be canceled safely." }, 409);
+    }
     await c.env.DB.batch([
       c.env.DB.prepare(
         "UPDATE draft_jobs SET status = 'canceled', error_message = NULL, updated_at = ? WHERE id = ? AND seller_account_id = ?",
@@ -1305,22 +1363,38 @@ app.post("/api/queue/:itemId/retry", requireSession, async (c) => {
     ).bind(job.draft_id, seller.id).first<{ id: string; payload_json: string }>();
     if (attempt) {
       const request = PublishRequestSchema.parse(JSON.parse(attempt.payload_json));
-      const now = new Date().toISOString();
-      await c.env.DB.batch([
-        c.env.DB.prepare(
-          "UPDATE publish_attempts SET status = 'queued', response_json = NULL, updated_at = ? WHERE id = ? AND seller_account_id = ?",
-        ).bind(now, attempt.id, seller.id),
-        c.env.DB.prepare(
-          "UPDATE draft_jobs SET status = 'publishing', error_message = NULL, updated_at = ? WHERE id = ? AND seller_account_id = ?",
-        ).bind(now, job.id, seller.id),
-      ]);
       const draft = await loadDraft(c.env, job.draft_id, seller.id);
-      if (draft) {
-        await saveDraftPayload(c.env, DraftPayloadSchema.parse({
-          ...draft,
-          status: "publishing",
-        }), seller.id);
+      if (!draft) return c.json({ error: "Draft not found." }, 404);
+      const preparedDraft = await prepareDraftForVerification(c.env, seller, draft);
+      const requestedDraft = DraftPayloadSchema.parse({
+        ...preparedDraft,
+        selectedTitle: request.selectedTitle ?? preparedDraft.selectedTitle,
+        listingMode: request.listingMode ?? preparedDraft.listingMode,
+      });
+      const setupBlockers = requestedDraft.listingMode === "fixed_price"
+        ? await prepareSellerForPublish(c.env, seller, requestedDraft)
+        : [unsupportedListingModeBlocker(seller.id, requestedDraft)];
+      const blockers = setupBlockers.length > 0 ? setupBlockers : await verifyDraft(c.env, seller, requestedDraft);
+      if (blockers.length > 0) {
+        await replaceDraftBlockers(c.env, seller.id, requestedDraft.draftId, blockers);
+        await saveDraftPayload(c.env, DraftPayloadSchema.parse({ ...requestedDraft, status: "blocked", blockers }), seller.id);
+        return c.json({ error: "Draft must pass publish verification before retrying.", blockers }, 409);
       }
+      const now = new Date().toISOString();
+      const retried = await c.env.DB.prepare(
+        "UPDATE publish_attempts SET status = 'queued', response_json = NULL, updated_at = ? WHERE id = ? AND seller_account_id = ? AND status IN ('failed', 'canceled')",
+      ).bind(now, attempt.id, seller.id).run();
+      if ((retried.meta.changes ?? 0) === 0) {
+        return c.json({ error: "Publish retry is already in progress." }, 409);
+      }
+      await c.env.DB.prepare(
+        "UPDATE draft_jobs SET status = 'publishing', error_message = NULL, updated_at = ? WHERE id = ? AND seller_account_id = ?",
+      ).bind(now, job.id, seller.id).run();
+      await saveDraftPayload(c.env, DraftPayloadSchema.parse({
+        ...requestedDraft,
+        status: "publishing",
+        blockers: [],
+      }), seller.id);
       await c.env.PUBLISH_LISTING_QUEUE.send({
         type: "publish_listing",
         draftId: job.draft_id,
@@ -1355,22 +1429,22 @@ app.post("/api/uploads/batches", requireSession, async (c) => {
     }
     throw error;
   }
-  const body = await c.req.json().catch(() => ({}));
-  const payload = {
-    ...body,
-    marketplaceId: stringOr(body.marketplaceId, c.env.EBAY_MARKETPLACE_ID ?? "EBAY_US"),
-    pricingStrategy: body.pricingStrategy ?? "balanced",
-    captureSource: body.captureSource ?? "manual",
-    captureSessionId: body.captureSessionId ?? null,
-    captureDeviceModel: body.captureDeviceModel ?? null,
-    captureProfile: body.captureProfile ?? null,
-  };
-  const pricingStrategy = PricingStrategySchema.parse(payload.pricingStrategy);
-  const captureSource = stringOr(payload.captureSource, "manual");
-  const captureSessionId = stringOr(payload.captureSessionId, null);
-  const captureDeviceModel = stringOr(payload.captureDeviceModel, null);
-  const captureProfile = stringOr(payload.captureProfile, null);
-  const marketplaceId = stringOr(body.marketplaceId, c.env.EBAY_MARKETPLACE_ID ?? "EBAY_US");
+  const body = UploadBatchCreateInputSchema.parse(await readJsonRequest(c));
+  const pricingStrategy = body.pricingStrategy;
+  const captureSource = CaptureSourceSchema.parse(body.captureSource);
+  const captureSessionId = body.captureSessionId ?? null;
+  const captureDeviceModel = body.captureDeviceModel ?? null;
+  const captureProfile = body.captureProfile ?? null;
+  const marketplaceId = body.marketplaceId
+    ?? UploadBatchCreateInputSchema.shape.marketplaceId.unwrap().parse(c.env.EBAY_MARKETPLACE_ID ?? "EBAY_US");
+  if (captureSessionId) {
+    const captureSession = await c.env.DB.prepare(
+      "SELECT id FROM camera_capture_sessions WHERE id = ? AND seller_account_id = ?",
+    ).bind(captureSessionId, seller.id).first<{ id: string }>();
+    if (!captureSession) {
+      return c.json({ error: "Camera session not found." }, 404);
+    }
+  }
   const batchId = crypto.randomUUID();
   const now = new Date().toISOString();
   await c.env.DB.prepare(
@@ -1392,7 +1466,7 @@ app.post("/api/uploads/batches", requireSession, async (c) => {
       id: batchId,
       marketplaceId,
       pricingStrategy,
-      captureSource: captureSource as "manual" | "sony_monitor" | "sony_remote",
+      captureSource,
       captureSessionId: captureSessionId,
       captureDeviceModel,
       captureProfile,
@@ -1405,8 +1479,16 @@ app.post("/api/uploads/batches", requireSession, async (c) => {
 
 app.post("/api/camera/sessions", requireSession, async (c) => {
   const seller = c.get("seller")!;
-  const body = await c.req.json().catch(() => ({}));
+  const body = await readJsonRequest(c);
   const parsed = CameraSessionCreateInputSchema.parse(body);
+  if (parsed.batchId) {
+    const batch = await c.env.DB.prepare(
+      "SELECT id FROM upload_batches WHERE id = ? AND seller_account_id = ?",
+    ).bind(parsed.batchId, seller.id).first<{ id: string }>();
+    if (!batch) {
+      return c.json({ error: "Upload batch not found." }, 404);
+    }
+  }
   const sessionId = crypto.randomUUID();
   const now = new Date().toISOString();
   await c.env.DB.prepare(
@@ -1451,11 +1533,11 @@ app.post("/api/camera/sessions", requireSession, async (c) => {
 
 app.post("/api/uploads/init", requireSession, async (c) => {
   const seller = c.get("seller")!;
-  const body = await c.req.json().catch(() => ({}));
-  const batchId = stringOr(body.batchId, "");
-  const fileName = stringOr(body.fileName, "upload.jpg");
-  const contentType = stringOr(body.contentType, "image/jpeg");
-  const sizeBytes = optionalNumber(body.sizeBytes);
+  const body = UploadInitInputSchema.parse(await readJsonRequest(c));
+  const batchId = body.batchId;
+  const fileName = body.fileName;
+  const contentType = body.contentType;
+  const sizeBytes = body.sizeBytes ?? null;
   const batch = await c.env.DB.prepare(
     "SELECT id FROM upload_batches WHERE id = ? AND seller_account_id = ?",
   ).bind(batchId, seller.id).first<{ id: string }>();
@@ -1465,10 +1547,6 @@ app.post("/api/uploads/init", requireSession, async (c) => {
   ).bind(batchId).first<{ count: number }>();
   if ((photoCount?.count ?? 0) >= MAX_BATCH_PHOTOS) {
     return c.json({ error: `A product can contain at most ${MAX_BATCH_PHOTOS} photos.` }, 413);
-  }
-  if (!contentType.startsWith("image/")) return c.json({ error: "Only image uploads are supported." }, 415);
-  if (sizeBytes !== null && sizeBytes > MAX_UPLOAD_BYTES) {
-    return c.json({ error: "That image is too large. Use an image under 12 MB." }, 413);
   }
   const visionContextResult = body.visionContext == null
     ? { success: true as const, data: null }
@@ -1508,6 +1586,27 @@ app.put("/api/uploads/object/:objectKey", async (c) => {
   if (!uploadState || uploadState.objectKey !== c.req.param("objectKey")) {
     return c.json({ error: "Upload token is invalid or expired." }, 401);
   }
+  const photo = await c.env.DB.prepare(
+    "SELECT id, content_type FROM batch_photos WHERE id = ? AND batch_id = ? AND object_key = ?",
+  ).bind(uploadState.photoId, uploadState.batchId, uploadState.objectKey).first<{ id: string; content_type: string }>();
+  if (!photo) {
+    return c.json({ error: "Upload target no longer exists." }, 404);
+  }
+  // Normalize legacy rows such as image/jpg before enforcing the current
+  // supported-media contract. A stale row should produce a client error, not
+  // escape as an unhandled Zod exception.
+  const expectedContentType = normalizeUploadContentType(photo.content_type);
+  if (!expectedContentType) {
+    return c.json({ error: "The initialized photo format is not supported." }, 415);
+  }
+  const requestContentType = normalizeUploadContentType(c.req.header("Content-Type"));
+  if (!requestContentType || requestContentType !== expectedContentType) {
+    return c.json({ error: "Upload content type does not match the initialized photo." }, 415);
+  }
+  const contentLength = Number(c.req.header("Content-Length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_UPLOAD_BYTES) {
+    return c.json({ error: "That image is too large. Use an image under 12 MB." }, 413);
+  }
   const body = await c.req.arrayBuffer();
   if (!body.byteLength) {
     return c.json({ error: "Upload body is empty." }, 400);
@@ -1515,19 +1614,26 @@ app.put("/api/uploads/object/:objectKey", async (c) => {
   if (body.byteLength > MAX_UPLOAD_BYTES) {
     return c.json({ error: "That image is too large. Use an image under 12 MB." }, 413);
   }
+  const detectedContentType = sniffImageContentType(body);
+  if (!detectedContentType || !uploadContentTypesMatch(expectedContentType, detectedContentType)) {
+    return c.json({ error: "Upload bytes do not match a supported image format." }, 415);
+  }
   await c.env.UPLOADS_BUCKET.put(uploadState.objectKey, body, {
     httpMetadata: {
-      contentType: c.req.header("Content-Type") ?? "image/jpeg",
+      contentType: expectedContentType,
     },
   });
+  await c.env.DB.prepare(
+    "UPDATE batch_photos SET size_bytes = ?, content_type = ? WHERE id = ? AND batch_id = ?",
+  ).bind(body.byteLength, expectedContentType, uploadState.photoId, uploadState.batchId).run();
   await c.env.SESSION_KV.delete(`upload:${token}`);
   return c.json({ ok: true, objectKey: uploadState.objectKey });
 });
 
 app.get("/api/public/photos/:photoId", async (c) => {
   const photo = await c.env.DB.prepare(
-    "SELECT id, object_key, content_type FROM batch_photos WHERE id = ?",
-  ).bind(c.req.param("photoId")).first<{ id: string; object_key: string; content_type: string | null }>();
+    "SELECT id, object_key, file_name, content_type FROM batch_photos WHERE id = ?",
+  ).bind(c.req.param("photoId")).first<{ id: string; object_key: string; file_name: string; content_type: string | null }>();
   if (!photo) {
     return c.json({ error: "Photo not found." }, 404);
   }
@@ -1535,20 +1641,31 @@ app.get("/api/public/photos/:photoId", async (c) => {
   if (!object?.body) {
     return c.json({ error: "Photo asset is missing." }, 404);
   }
+  const contentType = normalizeUploadContentType(photo.content_type)
+    ?? normalizeUploadContentType(object.httpMetadata?.contentType);
+  if (!contentType) {
+    return c.json({ error: "Photo format is not supported." }, 415);
+  }
   return new Response(object.body, {
     headers: {
-      "Cache-Control": "public, max-age=3600",
-      "Content-Type": object.httpMetadata?.contentType ?? photo.content_type ?? "image/jpeg",
+      "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+      "Content-Disposition": `inline; filename="${sanitizeFileName(photo.file_name).slice(0, 180)}"`,
+      "Content-Security-Policy": "default-src 'none'; sandbox",
+      "Content-Type": contentType,
+      "ETag": object.httpEtag,
+      "X-Robots-Tag": "noindex, nofollow, noarchive",
     },
   });
 });
 
 app.post("/api/drafts/jobs", requireSession, async (c) => {
   const seller = c.get("seller")!;
-  const body = await c.req.json().catch(() => ({}));
-  const batchId = stringOr(body.batchId, "");
-  const pricingStrategy = PricingStrategySchema.parse(body.pricingStrategy ?? "balanced");
-  let autoPublish = body.autoPublish !== false;
+  const body = DraftJobsCreateInputSchema.parse(await readJsonRequest(c));
+  const batchId = body.batchId;
+  const pricingStrategy = body.pricingStrategy;
+  // Publishing is a live marketplace mutation. Omitted input must always mean
+  // review first; only an explicit true can opt into the guarded automation.
+  let autoPublish = body.autoPublish === true;
   if (autoPublish) {
     try {
       await assertCanAutoPublish(c.env, seller.id);
@@ -1565,6 +1682,16 @@ app.post("/api/drafts/jobs", requireSession, async (c) => {
   ).bind(batchId, seller.id).first<{ id: string; marketplace_id: string; capture_profile: string | null }>();
   if (!batch) {
     return c.json({ error: "Upload batch not found." }, 404);
+  }
+  const photos = await c.env.DB.prepare(
+    "SELECT object_key FROM batch_photos WHERE batch_id = ? ORDER BY created_at ASC",
+  ).bind(batchId).all<{ object_key: string }>();
+  if ((photos.results ?? []).length === 0) {
+    return c.json({ error: "Upload at least one photo before creating a draft." }, 409);
+  }
+  const uploaded = await Promise.all((photos.results ?? []).map((photo) => c.env.UPLOADS_BUCKET.head(photo.object_key)));
+  if (uploaded.some((object) => !object)) {
+    return c.json({ error: "One or more photos are still uploading. Finish uploads before creating a draft." }, 409);
   }
   await c.env.DB.prepare(
     "UPDATE upload_batches SET pricing_strategy = ?, status = 'queued', updated_at = ? WHERE id = ?",
@@ -1662,7 +1789,7 @@ app.patch("/api/drafts/:draftId", requireSession, async (c) => {
   if (!row) {
     return c.json({ error: "Draft not found." }, 404);
   }
-  const body = await c.req.json().catch(() => ({}));
+  const body = DraftPatchInputSchema.parse(await readJsonRequest(c));
   const draft = DraftPayloadSchema.parse(JSON.parse(row.payload_json));
   const categoryInput = stringOr(body.category, null);
   const manualPrice = optionalNumber(body.manualPrice);
@@ -1773,7 +1900,7 @@ app.post("/api/seller/blockers/:blockerId/resolve", requireSession, async (c) =>
   if (!blocker) {
     return c.json({ error: "Blocker not found." }, 404);
   }
-  const body = await c.req.json().catch(() => ({}));
+  const body = await readJsonRequest(c);
   const payload = blockerPayload(blocker);
   if (blocker.type === "missing_fulfillment_policy" || blocker.type === "missing_payment_policy" || blocker.type === "missing_return_policy") {
     const marketplaceId = stringOr(body.marketplaceId, stringOr(payload.marketplaceId, c.env.EBAY_MARKETPLACE_ID ?? "EBAY_US"));
@@ -1781,7 +1908,7 @@ app.post("/api/seller/blockers/:blockerId/resolve", requireSession, async (c) =>
   } else if (blocker.type === "missing_inventory_location") {
     await ensureInventoryLocation(c.env, seller, body);
   } else if (blocker.type === "missing_required_aspects") {
-    await applyDraftResolutionValues(c.env, blocker.draft_id, body.values ?? {});
+    await applyDraftResolutionValues(c.env, blocker.draft_id, asRecord(body.values) ?? {});
   }
   await c.env.DB.prepare(
     "UPDATE blockers SET status = 'resolved', updated_at = ? WHERE id = ?",
@@ -1822,15 +1949,26 @@ app.post("/api/listings/:draftId/publish", requireSession, async (c) => {
   if (!draft) {
     return c.json({ error: "Draft not found." }, 404);
   }
-  const body = PublishRequestSchema.parse(await c.req.json().catch(() => ({})));
+  const body = PublishRequestSchema.parse(await readJsonRequest(c));
   const preparedDraft = await prepareDraftForVerification(c.env, seller, draft);
-  const setupBlockers = await prepareSellerForPublish(c.env, seller, preparedDraft);
-  const blockers = setupBlockers.length > 0 ? setupBlockers : await verifyDraft(c.env, seller, preparedDraft);
+  const requestedDraft = DraftPayloadSchema.parse({
+    ...preparedDraft,
+    selectedTitle: body.selectedTitle ?? preparedDraft.selectedTitle,
+    listingMode: body.listingMode ?? preparedDraft.listingMode,
+  });
+  if (requestedDraft.listingMode !== "fixed_price") {
+    const blockers = [unsupportedListingModeBlocker(seller.id, requestedDraft)];
+    await replaceDraftBlockers(c.env, seller.id, requestedDraft.draftId, blockers);
+    await saveDraftPayload(c.env, DraftPayloadSchema.parse({ ...requestedDraft, status: "blocked", blockers }), seller.id);
+    return c.json({ error: "Auction publishing is not available. Choose fixed price.", blockers }, 409);
+  }
+  const setupBlockers = await prepareSellerForPublish(c.env, seller, requestedDraft);
+  const blockers = setupBlockers.length > 0 ? setupBlockers : await verifyDraft(c.env, seller, requestedDraft);
   if (blockers.length > 0) {
-    await replaceDraftBlockers(c.env, seller.id, preparedDraft.draftId, blockers);
+    await replaceDraftBlockers(c.env, seller.id, requestedDraft.draftId, blockers);
     return c.json({ error: "Draft is blocked from publishing.", blockers }, 409);
   }
-  const queued = await queuePublishAttempt(c.env, seller, preparedDraft, body);
+  const queued = await queuePublishAttempt(c.env, seller, requestedDraft, body);
   return c.json(queued);
 });
 
@@ -1840,56 +1978,95 @@ app.post("/api/market/listings/:draftId/publish", requireSession, async (c) => {
   if (!draftId) {
     return c.json({ error: "Draft ID is required." }, 400);
   }
+  const body = MarketPublishRequestSchema.parse(await readJsonRequest(c));
   const draftRow = await c.env.DB.prepare(
     "SELECT id, payload_json FROM drafts WHERE id = ? AND seller_account_id = ?",
   ).bind(draftId, seller.id).first<{ id: string; payload_json: string }>();
   if (!draftRow) {
     return c.json({ error: "Draft not found." }, 404);
   }
-  const draft = DraftPayloadSchema.parse(JSON.parse(draftRow.payload_json));
+  const draft = await hydrateDraftPhotos(c.env, DraftPayloadSchema.parse(JSON.parse(draftRow.payload_json)));
+  const selectedPricing = draft.pricing.options.find((option) => option.strategy === body.selectedStrategy);
+  const matchingManualPrice = draft.manualPriceOverride?.strategy === body.selectedStrategy
+    ? draft.manualPriceOverride.price
+    : null;
+  const price = matchingManualPrice ?? selectedPricing?.price ?? 0;
+  if (!selectedPricing && matchingManualPrice == null) {
+    return c.json({ error: "The selected pricing option is no longer available. Refresh the draft and choose a price again." }, 409);
+  }
+  if (!Number.isFinite(price) || price <= 0) {
+    return c.json({ error: "Set a positive seller price before publishing to ListingOS Market." }, 409);
+  }
+  if (!draft.selectedTitle.trim() || draft.photos.length === 0) {
+    return c.json({ error: "A title and at least one photo are required before publishing." }, 409);
+  }
   const now = new Date().toISOString();
-  const listingId = crypto.randomUUID();
-  const slug = createMarketSlug(draft.selectedTitle || draft.draftId);
+  const existing = await c.env.DB.prepare(
+    "SELECT id, slug, status FROM market_listings WHERE seller_account_id = ? AND draft_id = ? ORDER BY created_at DESC LIMIT 1",
+  ).bind(seller.id, draft.draftId).first<{ id: string; slug: string; status: string }>();
+  if (existing?.status === "sold") {
+    return c.json({ error: "A sold market listing cannot be republished from the same draft." }, 409);
+  }
+  let listingId = existing?.id ?? crypto.randomUUID();
+  let slug = existing?.slug
+    ?? `${createMarketSlug(draft.selectedTitle || draft.draftId).slice(0, 72)}-${draft.draftId.slice(0, 8)}`;
   const locationLabel = firstNonEmptyString([
     c.env.OFFERUP_DEFAULT_CITY ? `${c.env.OFFERUP_DEFAULT_CITY}, ${c.env.OFFERUP_DEFAULT_STATE ?? ""}`.trim() : null,
     c.env.OFFERUP_DEFAULT_ZIP ?? null,
     "Remote pickup",
   ]) ?? "Remote pickup";
-  const price = draft.manualPriceOverride?.price ?? draft.pricing.options[0]?.price ?? 0;
-  await c.env.DB.prepare(
-    `INSERT INTO market_listings (
-      id, seller_account_id, draft_id, slug, title, description, status, price, currency, location_label, latitude, longitude, category, photo_urls_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(
-    listingId,
-    seller.id,
-    draft.draftId,
-    slug,
+  const values = [
     draft.selectedTitle,
     draft.description,
     price,
     locationLabel,
-    c.env.OFFERUP_DEFAULT_LATITUDE ? Number(c.env.OFFERUP_DEFAULT_LATITUDE) : null,
-    c.env.OFFERUP_DEFAULT_LONGITUDE ? Number(c.env.OFFERUP_DEFAULT_LONGITUDE) : null,
+    numericCoordinate(c.env.OFFERUP_DEFAULT_LATITUDE, -90, 90),
+    numericCoordinate(c.env.OFFERUP_DEFAULT_LONGITUDE, -180, 180),
     draft.categoryGuess.categoryName,
     JSON.stringify(draft.photos.map((photo) => photo.url)),
-    now,
-    now,
-  ).run();
-  return c.json({ ok: true, listingId, listingSlug: slug, publicUrl: `${new URL(c.req.url).origin}/api/public/market/listings/${encodeURIComponent(slug)}`, status: "active" });
+  ] as const;
+  if (existing) {
+    await c.env.DB.prepare(
+      "UPDATE market_listings SET title = ?, description = ?, status = 'active', price = ?, location_label = ?, latitude = ?, longitude = ?, category = ?, photo_urls_json = ?, updated_at = ? WHERE id = ? AND seller_account_id = ?",
+    ).bind(...values, now, listingId, seller.id).run();
+  } else {
+    const inserted = await c.env.DB.prepare(
+      `INSERT INTO market_listings (
+        id, seller_account_id, draft_id, slug, title, description, status, price, currency, location_label, latitude, longitude, category, photo_urls_json, created_at, updated_at
+      ) SELECT ?, ?, ?, ?, ?, ?, 'active', ?, 'USD', ?, ?, ?, ?, ?, ?, ?
+        WHERE NOT EXISTS (
+          SELECT 1 FROM market_listings WHERE seller_account_id = ? AND draft_id = ?
+        )`
+    ).bind(listingId, seller.id, draft.draftId, slug, ...values, now, now, seller.id, draft.draftId).run();
+    if ((inserted.meta.changes ?? 0) === 0) {
+      const winner = await c.env.DB.prepare(
+        "SELECT id, slug, status FROM market_listings WHERE seller_account_id = ? AND draft_id = ? ORDER BY created_at DESC LIMIT 1",
+      ).bind(seller.id, draft.draftId).first<{ id: string; slug: string; status: string }>();
+      if (!winner) throw new Error("The market listing could not be claimed.");
+      if (winner.status === "sold") return c.json({ error: "A sold market listing cannot be republished from the same draft." }, 409);
+      listingId = winner.id;
+      slug = winner.slug;
+      await c.env.DB.prepare(
+        "UPDATE market_listings SET title = ?, description = ?, status = 'active', price = ?, location_label = ?, latitude = ?, longitude = ?, category = ?, photo_urls_json = ?, updated_at = ? WHERE id = ? AND seller_account_id = ?",
+      ).bind(...values, now, listingId, seller.id).run();
+    }
+  }
+  return c.json({ ok: true, listingId, listingSlug: slug, publicUrl: getPublicMarketListingUrl(c.env, slug), status: "active" });
 });
 
 app.post("/api/market/listings/:listingId/unpublish", requireSession, async (c) => {
   const seller = c.get("seller")!;
   const listingId = c.req.param("listingId");
-  await c.env.DB.prepare("UPDATE market_listings SET status = 'hidden', updated_at = ? WHERE id = ? AND seller_account_id = ?").bind(new Date().toISOString(), listingId, seller.id).run();
+  const result = await c.env.DB.prepare("UPDATE market_listings SET status = 'hidden', updated_at = ? WHERE id = ? AND seller_account_id = ?").bind(new Date().toISOString(), listingId, seller.id).run();
+  if ((result.meta.changes ?? 0) === 0) return c.json({ error: "Market listing not found." }, 404);
   return c.json({ ok: true });
 });
 
 app.post("/api/market/listings/:listingId/mark-sold", requireSession, async (c) => {
   const seller = c.get("seller")!;
   const listingId = c.req.param("listingId");
-  await c.env.DB.prepare("UPDATE market_listings SET status = 'sold', updated_at = ? WHERE id = ? AND seller_account_id = ?").bind(new Date().toISOString(), listingId, seller.id).run();
+  const result = await c.env.DB.prepare("UPDATE market_listings SET status = 'sold', updated_at = ? WHERE id = ? AND seller_account_id = ?").bind(new Date().toISOString(), listingId, seller.id).run();
+  if ((result.meta.changes ?? 0) === 0) return c.json({ error: "Market listing not found." }, 404);
   return c.json({ ok: true });
 });
 
@@ -1932,40 +2109,46 @@ app.get("/api/public/market/listings", async (c) => {
     return PublicMarketListingSchema.parse({
       id: row.id,
       slug: row.slug,
-      sellerUsername: `seller:${row.seller_account_id.slice(0, 8)}`,
-      draftId: row.draft_id,
+      sellerUsername: "ListingOS seller",
+      draftId: null,
       title: row.title,
       description: row.description,
       status: row.status as "active" | "draft" | "sold" | "hidden" | "archived",
       price: row.price,
       currency: row.currency,
       locationLabel: row.location_label,
-      latitude: row.latitude,
-      longitude: row.longitude,
       category: row.category,
       photoUrls,
       distanceMiles,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      publicUrl: `${new URL(c.req.url).origin}/api/public/market/listings/${encodeURIComponent(row.slug)}`,
+      publicUrl: getPublicMarketListingUrl(c.env, row.slug),
       threadId: null,
     });
   });
-  const sorted = query.lat != null && query.lng != null
-    ? listings.sort((left, right) => (left.distanceMiles ?? Number.POSITIVE_INFINITY) - (right.distanceMiles ?? Number.POSITIVE_INFINITY))
+  const radiusFiltered = query.lat != null && query.lng != null && query.radiusMiles != null
+    ? listings.filter((listing) => listing.distanceMiles != null && listing.distanceMiles <= query.radiusMiles!)
     : listings;
+  const sorted = query.lat != null && query.lng != null
+    ? radiusFiltered.sort((left, right) => (left.distanceMiles ?? Number.POSITIVE_INFINITY) - (right.distanceMiles ?? Number.POSITIVE_INFINITY))
+    : radiusFiltered;
   return c.json(MarketFeedPageSchema.parse({
     items: sorted,
     nextCursor: null,
     total: sorted.length,
-    request: query,
+    request: {
+      q: query.q,
+      category: query.category,
+      radiusMiles: query.radiusMiles,
+      pageCursor: query.pageCursor,
+    },
   }));
 });
 
 app.get("/api/public/market/listings/:slug", async (c) => {
   const row = await c.env.DB.prepare(
-    "SELECT id, slug, seller_account_id, draft_id, title, description, status, price, currency, location_label, latitude, longitude, category, photo_urls_json, created_at, updated_at FROM market_listings WHERE slug = ? AND status = 'active' LIMIT 1",
-  ).bind(c.req.param("slug")).first<{ id: string; slug: string; seller_account_id: string; draft_id: string | null; title: string; description: string; status: string; price: number; currency: string; location_label: string | null; latitude: number | null; longitude: number | null; category: string | null; photo_urls_json: string | null; created_at: string; updated_at: string }>();
+    "SELECT id, slug, seller_account_id, draft_id, title, description, status, price, currency, location_label, category, photo_urls_json, created_at, updated_at FROM market_listings WHERE slug = ? AND status = 'active' LIMIT 1",
+  ).bind(c.req.param("slug")).first<{ id: string; slug: string; seller_account_id: string; draft_id: string | null; title: string; description: string; status: string; price: number; currency: string; location_label: string | null; category: string | null; photo_urls_json: string | null; created_at: string; updated_at: string }>();
   if (!row) {
     return c.json({ error: "Listing not found." }, 404);
   }
@@ -1973,60 +2156,75 @@ app.get("/api/public/market/listings/:slug", async (c) => {
   return c.json(PublicMarketListingSchema.parse({
     id: row.id,
     slug: row.slug,
-    sellerUsername: `seller:${row.seller_account_id.slice(0, 8)}`,
-    draftId: row.draft_id,
+    sellerUsername: "ListingOS seller",
+    draftId: null,
     title: row.title,
     description: row.description,
     status: row.status as "active" | "draft" | "sold" | "hidden" | "archived",
     price: row.price,
     currency: row.currency,
     locationLabel: row.location_label,
-    latitude: row.latitude,
-    longitude: row.longitude,
     category: row.category,
     photoUrls,
     distanceMiles: null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    publicUrl: `${new URL(c.req.url).origin}/api/public/market/listings/${encodeURIComponent(row.slug)}`,
+    publicUrl: getPublicMarketListingUrl(c.env, row.slug),
     threadId: null,
   }));
 });
 
 app.post("/api/public/market/listings/:slug/inquiries", async (c) => {
   const slug = c.req.param("slug");
-  const input = MarketInquiryStartSchema.parse(await c.req.json().catch(() => ({})));
+  const buyer = await getVerifiedBuyerSession(c.env, c.req.header("Authorization"));
+  if (!buyer) {
+    return c.json({ error: "Email verification is required before your inquiry can be delivered." }, 403);
+  }
+  const input = MarketInquiryStartSchema.parse(await readJsonRequest(c));
+  if (input.email !== buyer.email) {
+    return c.json({ error: "Inquiry email does not match the verified buyer session." }, 403);
+  }
   const listing = await c.env.DB.prepare("SELECT id FROM market_listings WHERE slug = ? AND status = 'active' LIMIT 1").bind(slug).first<{ id: string }>();
   if (!listing) {
     return c.json({ error: "Listing not found." }, 404);
   }
-  await enforceMarketRateLimit(c.env, `inquiry:${slug}:${input.email}`, "inquiry", 5);
-  const identity = await c.env.DB.prepare("SELECT id, verified_at FROM market_buyer_identities WHERE email = ? LIMIT 1").bind(input.email).first<{ id: string; verified_at: string | null }>();
-  if (!identity?.verified_at) {
-    return c.json({ error: "Email verification is required before your inquiry can be delivered." }, 403);
-  }
-  const blocked = await c.env.DB.prepare("SELECT id FROM market_blocks WHERE listing_id = ? AND buyer_identity_id = ? LIMIT 1").bind(listing.id, identity.id).first<{ id: string }>();
+  await enforceMarketRateLimit(c.env, `${slug}:${buyer.buyer_identity_id}`, "inquiry", 5);
+  const blocked = await c.env.DB.prepare("SELECT id FROM market_blocks WHERE listing_id = ? AND buyer_identity_id = ? LIMIT 1").bind(listing.id, buyer.buyer_identity_id).first<{ id: string }>();
   if (blocked) {
     return c.json({ error: "This listing is blocked for your account." }, 403);
   }
-  const threadId = crypto.randomUUID();
+  const existingThread = await c.env.DB.prepare(
+    "SELECT id FROM market_threads WHERE listing_id = ? AND buyer_identity_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+  ).bind(listing.id, buyer.buyer_identity_id).first<{ id: string }>();
+  const threadId = existingThread?.id ?? crypto.randomUUID();
   const messageId = crypto.randomUUID();
   const now = new Date().toISOString();
   const bodyText = escapePlainText(input.message, 1200);
-  await c.env.DB.batch([
-    c.env.DB.prepare(
-      "INSERT INTO market_threads (id, listing_id, buyer_identity_id, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)",
-    ).bind(threadId, listing.id, identity.id, now, now),
-    c.env.DB.prepare(
-      "INSERT INTO market_messages (id, thread_id, sender_type, body, created_at) VALUES (?, ?, 'buyer', ?, ?)",
-    ).bind(messageId, threadId, bodyText, now),
-  ]);
+  if (existingThread) {
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE market_threads SET updated_at = ? WHERE id = ?").bind(now, threadId),
+      c.env.DB.prepare(
+        "INSERT INTO market_messages (id, thread_id, sender_type, body, created_at) VALUES (?, ?, 'buyer', ?, ?)",
+      ).bind(messageId, threadId, bodyText, now),
+    ]);
+  } else {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        "INSERT INTO market_threads (id, listing_id, buyer_identity_id, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)",
+      ).bind(threadId, listing.id, buyer.buyer_identity_id, now, now),
+      c.env.DB.prepare(
+        "INSERT INTO market_messages (id, thread_id, sender_type, body, created_at) VALUES (?, ?, 'buyer', ?, ?)",
+      ).bind(messageId, threadId, bodyText, now),
+    ]);
+  }
   return c.json({ ok: true, threadId, verified: true });
 });
 
 app.get("/api/public/market/inquiries/verify", async (c) => {
+  const buyer = await getVerifiedBuyerSession(c.env, c.req.header("Authorization"));
+  if (!buyer) return c.json({ error: "A verified buyer session is required." }, 401);
   const inquiryId = c.req.query("inquiryId") ?? "";
-  const thread = await c.env.DB.prepare("SELECT id FROM market_threads WHERE id = ? LIMIT 1").bind(inquiryId).first<{ id: string }>();
+  const thread = await c.env.DB.prepare("SELECT id FROM market_threads WHERE id = ? AND buyer_identity_id = ? LIMIT 1").bind(inquiryId, buyer.buyer_identity_id).first<{ id: string }>();
   if (!thread) {
     return c.json({ error: "Inquiry not found." }, 404);
   }
@@ -2034,20 +2232,22 @@ app.get("/api/public/market/inquiries/verify", async (c) => {
 });
 
 app.get("/api/public/market/threads/:threadId", async (c) => {
+  const buyer = await getVerifiedBuyerSession(c.env, c.req.header("Authorization"));
+  if (!buyer) return c.json({ error: "A verified buyer session is required." }, 401);
   const thread = await c.env.DB.prepare(
-    "SELECT id, listing_id, buyer_identity_id, status, created_at, updated_at FROM market_threads WHERE id = ? LIMIT 1",
-  ).bind(c.req.param("threadId")).first<{ id: string; listing_id: string; buyer_identity_id: string; status: string; created_at: string; updated_at: string }>();
+    "SELECT id, listing_id, buyer_identity_id, status, created_at, updated_at FROM market_threads WHERE id = ? AND buyer_identity_id = ? LIMIT 1",
+  ).bind(c.req.param("threadId"), buyer.buyer_identity_id).first<{ id: string; listing_id: string; buyer_identity_id: string; status: string; created_at: string; updated_at: string }>();
   if (!thread) {
     return c.json({ error: "Thread not found." }, 404);
   }
   const messages = await c.env.DB.prepare(
     "SELECT id, thread_id, sender_type, body, created_at FROM market_messages WHERE thread_id = ? ORDER BY created_at ASC",
   ).bind(thread.id).all<{ id: string; thread_id: string; sender_type: string; body: string; created_at: string }>();
-  const listing = await c.env.DB.prepare("SELECT title FROM market_listings WHERE id = ? LIMIT 1").bind(thread.listing_id).first<{ title: string }>();
+  const listing = await c.env.DB.prepare("SELECT slug, title FROM market_listings WHERE id = ? LIMIT 1").bind(thread.listing_id).first<{ slug: string; title: string }>();
   return c.json(MarketThreadSchema.parse({
     id: thread.id,
     listingId: thread.listing_id,
-    listingSlug: listing?.title ? createMarketSlug(listing.title) : thread.listing_id,
+    listingSlug: listing?.slug ?? thread.listing_id,
     listingTitle: listing?.title ?? "Market listing",
     status: thread.status as "active" | "blocked" | "closed",
     buyerEmailMasked: "buyer@listingos.market",
@@ -2065,14 +2265,16 @@ app.get("/api/public/market/threads/:threadId", async (c) => {
 });
 
 app.post("/api/public/market/threads/:threadId/messages", async (c) => {
+  const buyer = await getVerifiedBuyerSession(c.env, c.req.header("Authorization"));
+  if (!buyer) return c.json({ error: "A verified buyer session is required." }, 401);
   const threadId = c.req.param("threadId");
-  const input = MarketMessageSchema.parse(await c.req.json().catch(() => ({})));
-  const thread = await c.env.DB.prepare("SELECT id, status FROM market_threads WHERE id = ? LIMIT 1").bind(threadId).first<{ id: string; status: string }>();
+  const input = MarketMessageSchema.parse(await readJsonRequest(c));
+  const thread = await c.env.DB.prepare("SELECT id, status FROM market_threads WHERE id = ? AND buyer_identity_id = ? LIMIT 1").bind(threadId, buyer.buyer_identity_id).first<{ id: string; status: string }>();
   if (!thread) {
     return c.json({ error: "Thread not found." }, 404);
   }
-  if (thread.status === "blocked") {
-    return c.json({ error: "This thread is blocked." }, 403);
+  if (thread.status !== "active") {
+    return c.json({ error: thread.status === "blocked" ? "This thread is blocked." : "This thread is closed." }, thread.status === "blocked" ? 403 : 409);
   }
   await enforceMarketRateLimit(c.env, `thread-message:${threadId}`, "message", 10);
   const messageId = crypto.randomUUID();
@@ -2080,25 +2282,34 @@ app.post("/api/public/market/threads/:threadId/messages", async (c) => {
   await c.env.DB.prepare(
     "INSERT INTO market_messages (id, thread_id, sender_type, body, created_at) VALUES (?, ?, 'buyer', ?, ?)",
   ).bind(messageId, thread.id, escapePlainText(input.body, 1800), now).run();
-  return c.json({ id: messageId, threadId: thread.id, body: escapePlainText(input.body, 1800), createdAt: now });
+  await c.env.DB.prepare("UPDATE market_threads SET updated_at = ? WHERE id = ?").bind(now, thread.id).run();
+  return c.json({ id: messageId, threadId: thread.id, senderType: "buyer", body: escapePlainText(input.body, 1800), createdAt: now });
 });
 
 app.post("/api/public/market/reports", async (c) => {
-  const input = MarketReportRequestSchema.parse(await c.req.json().catch(() => ({})));
+  const input = MarketReportRequestSchema.parse(await readJsonRequest(c));
+  if (JSON.stringify(input.details ?? {}).length > MAX_MARKET_REPORT_DETAILS_BYTES) {
+    return c.json({ error: "Report details are too large." }, 413);
+  }
   const listing = await c.env.DB.prepare("SELECT id FROM market_listings WHERE id = ? LIMIT 1").bind(input.listingId).first<{ id: string }>();
   if (!listing) {
     return c.json({ error: "Listing not found." }, 404);
   }
-  await enforceMarketRateLimit(c.env, `report:${input.listingId}`, "report", 5);
+  const buyer = await getVerifiedBuyerSession(c.env, c.req.header("Authorization"));
+  if (input.isBlockRequest && !buyer) {
+    return c.json({ error: "A verified buyer session is required to block a listing." }, 401);
+  }
+  const reporterKey = buyer?.buyer_identity_id ?? await privacySafeRateLimitKey(c.req.header("CF-Connecting-IP") ?? "anonymous");
+  await enforceMarketRateLimit(c.env, `${input.listingId}:${reporterKey}`, "report", 5);
   const reportId = crypto.randomUUID();
   const now = new Date().toISOString();
   await c.env.DB.prepare(
     "INSERT INTO market_reports (id, listing_id, reason, details_json, reporter, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-  ).bind(reportId, listing.id, input.reason, JSON.stringify(input.details ?? {}), input.isBlockRequest ? "anonymous" : null, now).run();
+  ).bind(reportId, listing.id, input.reason, JSON.stringify(input.details ?? {}), buyer ? "verified_buyer" : null, now).run();
   if (input.isBlockRequest) {
     await c.env.DB.prepare(
       "INSERT INTO market_blocks (id, listing_id, buyer_identity_id, reason, created_at) VALUES (?, ?, ?, ?, ?)",
-    ).bind(crypto.randomUUID(), listing.id, null, input.reason, now).run();
+    ).bind(crypto.randomUUID(), listing.id, buyer!.buyer_identity_id, input.reason, now).run();
   }
   return c.json({ ok: true, reportId });
 });
@@ -2122,6 +2333,12 @@ app.post("/api/listings/publish-all", requireSession, async (c) => {
     const preparedDraft = await prepareDraftForVerification(c.env, seller, draft);
     if (preparedDraft.blockers.length > 0) {
       skipped.push({ draftId: draft.draftId, reason: "Draft has unresolved blockers." });
+      continue;
+    }
+    if (preparedDraft.listingMode !== "fixed_price") {
+      const blockers = [unsupportedListingModeBlocker(seller.id, preparedDraft)];
+      await replaceDraftBlockers(c.env, seller.id, preparedDraft.draftId, blockers);
+      skipped.push({ draftId: draft.draftId, reason: "Auction publishing is not available." });
       continue;
     }
     const setupBlockers = await prepareSellerForPublish(c.env, seller, preparedDraft);
@@ -2186,6 +2403,10 @@ app.get("/api/listings/:draftId", requireSession, async (c) => {
 });
 
 app.onError((error, c) => {
+  if (error instanceof HttpError) {
+    if (error.status === 429) c.header("Retry-After", "60");
+    return c.json({ error: error.message }, error.status);
+  }
   if (error instanceof ZodError) {
     return c.json({ error: "The request did not match the expected format." }, 400);
   }
@@ -2233,6 +2454,72 @@ function requireSession(c: Context<AppEnvironment>, next: Next) {
     return c.json({ error: "Unauthorized." }, 401);
   }
   return next();
+}
+
+type HttpErrorStatus = 400 | 401 | 403 | 404 | 409 | 410 | 413 | 415 | 429 | 503;
+
+class HttpError extends Error {
+  constructor(public readonly status: HttpErrorStatus, message: string) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
+function bearerToken(authorization: string | undefined) {
+  const match = authorization?.match(/^Bearer\s+([^\s]+)$/i);
+  return match?.[1] ?? null;
+}
+
+async function readJsonRequest(c: Context<AppEnvironment>) {
+  const contentLength = Number(c.req.header("Content-Length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_JSON_BODY_BYTES) {
+    throw new HttpError(413, "Request body is too large.");
+  }
+  const rawBody = await c.req.text();
+  if (new TextEncoder().encode(rawBody).byteLength > MAX_JSON_BODY_BYTES) {
+    throw new HttpError(413, "Request body is too large.");
+  }
+  if (!rawBody.trim()) return {};
+  const parsed = parseJsonValue(rawBody);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new HttpError(400, "The request body must be a JSON object.");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function marketDemoVerificationCode(env: Bindings) {
+  const code = env.MARKET_EMAIL_VERIFICATION_DEMO_CODE?.trim() ?? "";
+  return /^\d{6}$/.test(code) ? code : null;
+}
+
+function isMarketDemoVerificationConfigured(env: Bindings) {
+  return marketDemoVerificationCode(env) !== null;
+}
+
+async function sha256Hex(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return bytesToHex(digest);
+}
+
+async function privacySafeRateLimitKey(value: string) {
+  return sha256Hex(value.trim().toLowerCase());
+}
+
+async function getVerifiedBuyerSession(env: Bindings, authorization: string | undefined) {
+  const token = bearerToken(authorization);
+  if (!token) return null;
+  const tokenHash = await sha256Hex(token);
+  return env.DB.prepare(
+    `SELECT s.id, s.buyer_identity_id, s.email
+     FROM market_buyer_sessions s
+     JOIN market_buyer_identities i ON i.id = s.buyer_identity_id
+     WHERE s.session_token = ? AND s.verified = 1 AND s.expires_at > ? AND i.verified_at IS NOT NULL
+     LIMIT 1`,
+  ).bind(tokenHash, new Date().toISOString()).first<{
+    id: string;
+    buyer_identity_id: string;
+    email: string;
+  }>();
 }
 
 function isAllowedWebOrigin(origin: string, configuredOrigin?: string) {
@@ -2527,9 +2814,12 @@ async function getOrCreateUsagePeriod(env: Bindings, sellerAccountId: string, pl
   }
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
-  await env.DB.prepare(
-    "INSERT INTO usage_periods (id, seller_account_id, period_start, period_end, entitlement, included_credits, extra_credits, used_credits, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?)",
+  const inserted = await env.DB.prepare(
+    "INSERT OR IGNORE INTO usage_periods (id, seller_account_id, period_start, period_end, entitlement, included_credits, extra_credits, used_credits, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?)",
   ).bind(id, sellerAccountId, periodStart, periodEnd, plan, includedCredits, now, now).run();
+  if ((inserted.meta.changes ?? 0) === 0) {
+    return getOrCreateUsagePeriod(env, sellerAccountId, plan);
+  }
   return {
     id,
     seller_account_id: sellerAccountId,
@@ -2868,12 +3158,18 @@ async function enforceMarketRateLimit(env: Bindings, key: string, kind: string, 
   const timestamps = Array.isArray(payload?.timestamps) ? payload.timestamps.filter((item): item is number => typeof item === "number") : [];
   const nextTimestamps = timestamps.filter((value) => now - value < 60_000);
   if (nextTimestamps.length >= maxEvents) {
-    throw new Error("Rate limit exceeded.");
+    throw new HttpError(429, "Too many requests. Try again in one minute.");
   }
   nextTimestamps.push(now);
-  await env.DB.prepare(
-    "INSERT INTO market_rate_events (id, bucket, payload_json, created_at) VALUES (?, ?, ?, ?)",
-  ).bind(crypto.randomUUID(), bucket, JSON.stringify({ timestamps: nextTimestamps }), new Date(now).toISOString()).run();
+  if (row) {
+    await env.DB.prepare(
+      "UPDATE market_rate_events SET payload_json = ?, created_at = ? WHERE id = ?",
+    ).bind(JSON.stringify({ timestamps: nextTimestamps }), new Date(now).toISOString(), row.id).run();
+  } else {
+    await env.DB.prepare(
+      "INSERT INTO market_rate_events (id, bucket, payload_json, created_at) VALUES (?, ?, ?, ?)",
+    ).bind(crypto.randomUUID(), bucket, JSON.stringify({ timestamps: nextTimestamps }), new Date(now).toISOString()).run();
+  }
 }
 
 function parseJsonRecord(value: string): Record<string, unknown> | null {
@@ -2981,7 +3277,7 @@ function buildQueueItem(env: Bindings, row: QueueRow) {
     buyerFacingUrl,
     updatedAt: row.publish_updated_at ?? row.draft_updated_at ?? row.job_updated_at ?? row.batch_updated_at,
     canOpen: Boolean(row.draft_id),
-    canCancel: status === "queued" || status === "processing" || status === "publishing",
+    canCancel: row.publish_status === "queued" || (status === "queued" && row.job_status === "queued"),
     canRetry: status === "failed",
   });
 }
@@ -3261,7 +3557,7 @@ async function processDraftJob(env: Bindings, jobId: string) {
   const comparables = cardNeedsConfirmation && identity.vertical !== "general" ? [] : market.accepted;
   const pricing = cardNeedsConfirmation && identity.vertical !== "general"
     ? buildCardNeedsReviewPricing(job.pricing_strategy)
-    : buildPricingSuggestions(comparables, aiDraft.suggestedPriceFloor, job.pricing_strategy, aiDraft.listingModeRecommendation);
+    : buildPricingSuggestions(comparables, aiDraft.suggestedPriceFloor, job.pricing_strategy, "fixed_price");
   const pricingEvidence = cardNeedsConfirmation && identity.vertical !== "general"
     ? PricingEvidenceSchema.parse({
       ...market.evidence,
@@ -3285,7 +3581,9 @@ async function processDraftJob(env: Bindings, jobId: string) {
     batchId: job.batch_id,
     marketplaceId: job.marketplace_id,
     status: draftStatus,
-    listingMode: aiDraft.listingModeRecommendation,
+    // The shared contract can represent auctions for the future adapter, but
+    // generated drafts default to the only verified mutation path today.
+    listingMode: "fixed_price",
     photos: photos.map((photo) => ({
       id: photo.id,
       fileName: photo.file_name,
@@ -3315,7 +3613,7 @@ async function processDraftJob(env: Bindings, jobId: string) {
     pricingEvidence,
     listingStrategies: pricing.options.map((option) => ({
       strategy: option.strategy,
-      listingMode: option.strategy === "fast_sale" && aiDraft.allowAuction ? "auction" : aiDraft.listingModeRecommendation,
+      listingMode: "fixed_price",
       rationale: option.rationale,
       expectedSpeedBand: option.speedBand,
     })),
@@ -3397,6 +3695,9 @@ async function processPublishAttempt(env: Bindings, attemptId: string, draftId: 
       selectedTitle: request.selectedTitle ?? draft.selectedTitle,
       listingMode: request.listingMode ?? draft.listingMode,
     });
+    if (resolvedDraft.listingMode !== "fixed_price") {
+      throw new Error("Auction publishing is not implemented. Change the listing mode to fixed price and retry.");
+    }
     if (resolvedDraft.selectedTitle !== draft.selectedTitle || resolvedDraft.listingMode !== draft.listingMode) {
       await saveDraftPayload(env, resolvedDraft, seller.id);
     }
@@ -3968,6 +4269,9 @@ async function queuePublishAttempt(
   draft: DraftPayload,
   request: { strategy: PricingStrategy; selectedTitle?: string; listingMode?: DraftPayload["listingMode"] },
 ) {
+  if ((request.listingMode ?? draft.listingMode) !== "fixed_price") {
+    throw new HttpError(409, "Auction publishing is not available. Choose fixed price.");
+  }
   const existingAttempt = await env.DB.prepare(
     "SELECT id, status, adapter, ebay_listing_id, ebay_offer_id, response_json, updated_at FROM publish_attempts WHERE draft_id = ? AND seller_account_id = ? AND status IN ('queued', 'publishing', 'published') ORDER BY created_at DESC LIMIT 1",
   ).bind(draft.draftId, seller.id).first<{
@@ -4013,8 +4317,13 @@ async function queuePublishAttempt(
 
   const attemptId = crypto.randomUUID();
   const now = new Date().toISOString();
-  await env.DB.prepare(
-    "INSERT INTO publish_attempts (id, draft_id, seller_account_id, adapter, status, payload_json, created_at, updated_at) VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)",
+  const inserted = await env.DB.prepare(
+    `INSERT INTO publish_attempts (id, draft_id, seller_account_id, adapter, status, payload_json, created_at, updated_at)
+     SELECT ?, ?, ?, ?, 'queued', ?, ?, ?
+     WHERE NOT EXISTS (
+       SELECT 1 FROM publish_attempts
+       WHERE draft_id = ? AND seller_account_id = ? AND status IN ('queued', 'publishing', 'published')
+     )`,
   ).bind(
     attemptId,
     draft.draftId,
@@ -4023,7 +4332,33 @@ async function queuePublishAttempt(
     JSON.stringify(PublishRequestSchema.parse(request)),
     now,
     now,
+    draft.draftId,
+    seller.id,
   ).run();
+  if ((inserted.meta.changes ?? 0) === 0) {
+    const winner = await env.DB.prepare(
+      "SELECT id, status, adapter, ebay_listing_id, ebay_offer_id, response_json FROM publish_attempts WHERE draft_id = ? AND seller_account_id = ? AND status IN ('queued', 'publishing', 'published') ORDER BY created_at DESC LIMIT 1",
+    ).bind(draft.draftId, seller.id).first<{
+      id: string;
+      status: "queued" | "publishing" | "published";
+      adapter: string;
+      ebay_listing_id: string | null;
+      ebay_offer_id: string | null;
+      response_json: string | null;
+    }>();
+    if (!winner) throw new Error("The publish attempt could not be claimed.");
+    const response = winner.response_json ? asRecord(safeJsonParse(winner.response_json)) : null;
+    return PublishResultSchema.parse({
+      attemptId: winner.id,
+      draftId: draft.draftId,
+      status: winner.status,
+      adapter: winner.adapter,
+      ebayListingId: winner.ebay_listing_id,
+      ebayOfferId: winner.ebay_offer_id,
+      buyerFacingUrl: stringOr(asRecord(response?.listing)?.listingUrl, null),
+      message: winner.status === "published" ? "Listing published successfully." : "An existing publish attempt is still in progress.",
+    });
+  }
   await saveDraftPayload(env, DraftPayloadSchema.parse({
     ...draft,
     status: "publishing",
@@ -4100,9 +4435,33 @@ async function hydrateDraftPhotos(env: Bindings, draft: DraftPayload) {
 }
 
 async function verifyDraft(env: Bindings, seller: SellerAccountRecord, draft: DraftPayload) {
+  if (draft.listingMode !== "fixed_price") {
+    return [unsupportedListingModeBlocker(seller.id, draft)];
+  }
   const accessToken = await getSellerAccessToken(env, seller);
   const policies = await getSellerPolicies(env, accessToken, draft.marketplaceId);
   const blockers = buildMarketplaceBlockers(seller.id, draft.marketplaceId, policies);
+  const normalizedTitle = draft.selectedTitle.trim();
+  if (!normalizedTitle || normalizedTitle.length > 80) {
+    blockers.push(createBlocker({
+      draftId: draft.draftId,
+      sellerAccountId: seller.id,
+      type: "missing_required_aspects",
+      title: "Title must fit eBay's limit",
+      description: "Enter a clear listing title between 1 and 80 characters before publishing.",
+      payload: { requiredFields: ["selectedTitle"], maximumLength: 80 },
+    }));
+  }
+  if (draft.photos.length === 0) {
+    blockers.push(createBlocker({
+      draftId: draft.draftId,
+      sellerAccountId: seller.id,
+      type: "missing_required_aspects",
+      title: "At least one product photo is required",
+      description: "eBay cannot publish this listing until it has a buyer-facing product photo.",
+      payload: { requiredFields: ["photos"] },
+    }));
+  }
   const selectedPricing = draft.pricing.options.find((item) => item.strategy === draft.pricing.recommendedStrategy) ?? draft.pricing.options[0];
   const effectivePrice = draft.manualPriceOverride?.price ?? selectedPricing?.price ?? 0;
   if (!Number.isFinite(effectivePrice) || effectivePrice <= 0) {
@@ -4168,6 +4527,20 @@ async function verifyDraft(env: Bindings, seller: SellerAccountRecord, draft: Dr
     }));
   }
   return blockers;
+}
+
+function unsupportedListingModeBlocker(sellerAccountId: string, draft: DraftPayload) {
+  return createBlocker({
+    draftId: draft.draftId,
+    sellerAccountId,
+    type: "invalid_listing_mode",
+    title: "Choose fixed-price publishing",
+    description: "The verified eBay adapter currently supports fixed-price Inventory API listings only. Auction publishing stays blocked until a dedicated adapter is implemented and tested.",
+    payload: {
+      requestedListingMode: draft.listingMode,
+      supportedListingMode: "fixed_price",
+    },
+  });
 }
 
 async function replaceDraftBlockers(env: Bindings, sellerAccountId: string, draftId: string, blockers: ReturnType<typeof createBlocker>[]) {
@@ -4515,6 +4888,9 @@ async function buildInventoryOfferPayload(
   settings: MarketplaceSettingsRecord,
   accessToken: string,
 ) {
+  if (draft.listingMode !== "fixed_price") {
+    throw new Error("Auction publishing is not implemented. Choose fixed price before publishing.");
+  }
   const selectedPricing = draft.pricing.options.find((item) => item.strategy === strategy) ?? draft.pricing.options[0];
   const effectivePrice = draft.manualPriceOverride?.price ?? selectedPricing.price;
   const sku = `seller-ai-${draft.draftId}`;
@@ -4556,7 +4932,7 @@ async function buildInventoryOfferPayload(
   const inventoryPayload = {
     availability: {
       shipToLocationAvailability: {
-        quantity: draft.listingMode === "auction" ? 1 : 1,
+        quantity: 1,
       },
     },
     condition,
@@ -4588,7 +4964,7 @@ async function buildInventoryOfferPayload(
   const offerPayload = {
     sku,
     marketplaceId: draft.marketplaceId,
-    format: draft.listingMode === "auction" ? "AUCTION" : "FIXED_PRICE",
+    format: "FIXED_PRICE",
     availableQuantity: 1,
     categoryId: draft.categoryGuess.categoryId,
     merchantLocationKey: settings.merchant_location_key,
@@ -4598,20 +4974,13 @@ async function buildInventoryOfferPayload(
       paymentPolicyId: settings.payment_policy_id,
       returnPolicyId: settings.return_policy_id,
     },
-    listingDuration: draft.listingMode === "auction" ? "DAYS_7" : "GTC",
-    pricingSummary: draft.listingMode === "auction"
-      ? {
-        auctionStartPrice: {
-          value: String(effectivePrice),
-          currency: currencyForMarketplace(draft.marketplaceId),
-        },
-      }
-      : {
-        price: {
-          value: String(effectivePrice),
-          currency: currencyForMarketplace(draft.marketplaceId),
-        },
+    listingDuration: "GTC",
+    pricingSummary: {
+      price: {
+        value: String(effectivePrice),
+        currency: currencyForMarketplace(draft.marketplaceId),
       },
+    },
   };
   return { sku, offerPayload };
 }
@@ -5167,6 +5536,7 @@ async function createListingDraft(
                 "The description must be buyer-ready: 1 short opening sentence, 3 to 6 concise bullet-style lines, and a final condition/shipping note when visible facts support it.",
                 "Do not invent accessories, measurements, authenticity claims, warranties, flaws, bundles, provenance, or condition details that are not visible or supported by marketplace context.",
                 "If a detail is uncertain, put it in missingInfo instead of writing it as fact.",
+                "Use fixed_price for listingModeRecommendation and false for allowAuction. The verified publishing adapter does not support auctions.",
                 "For a generic eBay US product with no visible brand mark or manufacturer part number, add separate item specifics Brand=Unbranded and MPN=Does not apply only when the photos support that conclusion. Never use those fallback values for a recognizable branded item, a trading card, or a product with a visible identifier; other marketplaces may require different unavailable values.",
                 "Titles should be search-rich, natural, under eBay's title limit, and free of spammy symbols, all-caps hype, or unverifiable claims.",
                 "Condition notes should be specific, transparent, and grounded in the photos.",
@@ -5250,8 +5620,8 @@ async function createListingDraft(
               description: { type: "string" },
               confidence: { type: "number" },
               suggestedPriceFloor: { type: ["number", "null"] },
-              listingModeRecommendation: { type: "string", enum: ["fixed_price", "auction"] },
-              allowAuction: { type: "boolean" },
+              listingModeRecommendation: { type: "string", enum: ["fixed_price"] },
+              allowAuction: { type: "boolean", enum: [false] },
               itemSpecifics: {
                 type: "array",
                 items: {
@@ -6841,6 +7211,50 @@ function sanitizeFileName(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, "-");
 }
 
+function normalizeUploadContentType(value: string | null | undefined) {
+  const normalized = value?.split(";", 1)[0]?.trim().toLowerCase();
+  const aliased = normalized === "image/jpg" ? "image/jpeg" : normalized;
+  const parsed = SupportedUploadContentTypeSchema.safeParse(aliased);
+  return parsed.success ? parsed.data : null;
+}
+
+function sniffImageContentType(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg" as const;
+  if (bytes.length >= 8
+    && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+    && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) {
+    return "image/png" as const;
+  }
+  if (bytes.length >= 12
+    && String.fromCharCode(...bytes.slice(0, 4)) === "RIFF"
+    && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP") {
+    return "image/webp" as const;
+  }
+  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(4, 8)) === "ftyp") {
+    const brand = String.fromCharCode(...bytes.slice(8, 12)).toLowerCase();
+    if (["heic", "heix", "hevc", "hevx"].includes(brand)) return "image/heic" as const;
+    if (["mif1", "msf1", "heif"].includes(brand)) return "image/heif" as const;
+  }
+  return null;
+}
+
+function uploadContentTypesMatch(
+  expected: ReturnType<typeof normalizeUploadContentType>,
+  detected: ReturnType<typeof sniffImageContentType>,
+) {
+  if (!expected || !detected) return false;
+  if ((expected === "image/heic" || expected === "image/heif")
+    && (detected === "image/heic" || detected === "image/heif")) return true;
+  return expected === detected;
+}
+
+function numericCoordinate(value: string | undefined, minimum: number, maximum: number) {
+  if (!value?.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum ? parsed : null;
+}
+
 function isProbablyMobileCallback(userAgent: string | undefined) {
   const normalized = userAgent?.toLowerCase() ?? "";
   return normalized.includes("iphone") || normalized.includes("ipad") || normalized.includes("android") || normalized.includes("mobile");
@@ -7064,4 +7478,17 @@ function getAppEncryptionSecret(env: Bindings) {
 
 function getPublicApiBaseUrl(env: Bindings) {
   return (env.PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8787").replace(/\/$/, "");
+}
+
+function getPublicMarketListingUrl(env: Bindings, slug: string) {
+  const fallback = "https://listingos.expo.app";
+  try {
+    const base = new URL(env.PUBLIC_WEB_APP_URL?.trim() || fallback);
+    if (base.protocol !== "https:" && !(base.protocol === "http:" && ["localhost", "127.0.0.1"].includes(base.hostname))) {
+      throw new Error("Unsupported public web app URL protocol.");
+    }
+    return new URL(`/market/${encodeURIComponent(slug)}`, base.origin).toString();
+  } catch {
+    return `${fallback}/market/${encodeURIComponent(slug)}`;
+  }
 }

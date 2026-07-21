@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Animated,
   type GestureResponderEvent,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -25,6 +26,7 @@ import type * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { brand } from "@/config/brand";
+import { appConfig } from "@/config/app";
 import { analyzeEncodedImage } from "@/lib/vision/yolox";
 import type { VisionFrameContext } from "@/shared/contracts";
 import { usePalette } from "@/theme/theme";
@@ -80,6 +82,7 @@ export function CameraFirstSurface({
   const [capturing, setCapturing] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraInstanceKey, setCameraInstanceKey] = useState(0);
   const [pictureSize, setPictureSize] = useState<string>();
   const [visionUri, setVisionUri] = useState<string | null>(null);
   const [visionResult, setVisionResult] = useState<VisionFrameContext | null>(null);
@@ -106,6 +109,10 @@ export function CameraFirstSurface({
 
   async function capturePhoto() {
     if (!cameraRef.current || !cameraReady || capturing) return;
+    if (assets.length >= appConfig.maxPhotosPerSelection) {
+      setCameraError(`This product already has the ${appConfig.maxPhotosPerSelection}-photo maximum. Finish it to keep listing.`);
+      return;
+    }
     setCapturing(true);
     setCameraError(null);
     try {
@@ -163,9 +170,20 @@ export function CameraFirstSurface({
   function toggleFacing() {
     resetFocusState();
     setCameraReady(false);
+    setPictureSize(undefined);
     setFacing((current) => current === "back" ? "front" : "back");
+    setFlash("off");
     setTorchEnabled(false);
     setZoom(0);
+  }
+
+  function restartCamera() {
+    resetFocusState();
+    setCameraReady(false);
+    setCameraError(null);
+    setPictureSize(undefined);
+    setTorchEnabled(false);
+    setCameraInstanceKey((current) => current + 1);
   }
 
   function focusCamera(event: GestureResponderEvent) {
@@ -338,6 +356,7 @@ export function CameraFirstSurface({
   }
 
   if (!permission.granted) {
+    const canRequestPermission = permission.canAskAgain;
     return (
       <View style={[styles.permissionShell, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.permissionMark}>
@@ -347,8 +366,13 @@ export function CameraFirstSurface({
         <Text style={styles.permissionBody}>
           ListingOS uses the camera to capture every product view, keep the photos together, and build the eBay draft for you.
         </Text>
-        <Pressable accessibilityRole="button" onPress={() => void requestPermission()} style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>Allow camera access</Text>
+        <Pressable
+          accessibilityLabel={canRequestPermission ? "Allow camera access" : "Open device settings for camera access"}
+          accessibilityRole="button"
+          onPress={() => void (canRequestPermission ? requestPermission() : Linking.openSettings())}
+          style={styles.primaryButton}
+        >
+          <Text style={styles.primaryButtonText}>{canRequestPermission ? "Allow camera access" : "Open device settings"}</Text>
         </Pressable>
         <Pressable accessibilityRole="button" onPress={onUseExistingPhotos} style={styles.secondaryButton}>
           <Text style={styles.secondaryButtonText}>Use existing photos</Text>
@@ -365,6 +389,7 @@ export function CameraFirstSurface({
           enableTorch={torchEnabled}
           facing={facing}
           flash={flash}
+          key={cameraInstanceKey}
           mirror={facing === "front"}
           mute
           onCameraReady={() => void handleCameraReady()}
@@ -560,7 +585,19 @@ export function CameraFirstSurface({
           </View>
         ) : null}
 
-        {cameraError ? <Text style={styles.errorText}>{cameraError}</Text> : null}
+        {cameraError ? (
+          <View accessibilityLiveRegion="assertive" style={styles.cameraErrorPanel}>
+            <Text selectable style={styles.errorText}>{cameraError}</Text>
+            <View style={styles.cameraErrorActions}>
+              <Pressable accessibilityLabel="Restart camera" accessibilityRole="button" onPress={restartCamera} style={styles.cameraErrorButton}>
+                <Text style={styles.cameraErrorButtonText}>Restart camera</Text>
+              </Pressable>
+              <Pressable accessibilityLabel="Use existing photos" accessibilityRole="button" onPress={onUseExistingPhotos} style={styles.cameraErrorButton}>
+                <Text style={styles.cameraErrorButtonText}>Use photos</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.captureSettings}>
           <Pressable
@@ -600,12 +637,14 @@ export function CameraFirstSurface({
             </Pressable>
           </View>
           <Pressable
-            accessibilityLabel={cameraReady ? "Take photo" : "Camera is starting"}
+            accessibilityLabel={assets.length >= appConfig.maxPhotosPerSelection
+              ? "Maximum photos captured"
+              : cameraReady ? "Take photo" : "Camera is starting"}
             accessibilityRole="button"
-            accessibilityState={{ disabled: capturing || !cameraReady }}
-            disabled={capturing || !cameraReady}
+            accessibilityState={{ disabled: capturing || !cameraReady || assets.length >= appConfig.maxPhotosPerSelection }}
+            disabled={capturing || !cameraReady || assets.length >= appConfig.maxPhotosPerSelection}
             onPress={() => void capturePhoto()}
-            style={[styles.shutterOuter, !cameraReady ? styles.shutterDisabled : null]}
+            style={[styles.shutterOuter, !cameraReady || assets.length >= appConfig.maxPhotosPerSelection ? styles.shutterDisabled : null]}
           >
             <View style={styles.shutterInner}>{capturing ? <ActivityIndicator color="#07111B" /> : null}</View>
           </Pressable>
@@ -716,7 +755,11 @@ const createStyles = (palette: ReturnType<typeof usePalette>) => StyleSheet.crea
   doneButton: { height: 48, borderRadius: 16, paddingHorizontal: 17, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: palette.teal },
   doneButtonText: { color: "#07111B", fontSize: 14, fontWeight: "900" },
   doneButtonArrow: { color: "#07111B", fontSize: 22, lineHeight: 22, fontWeight: "900" },
-  errorText: { color: "#FFB1B1", fontSize: 12, fontWeight: "700", marginBottom: 8 },
+  cameraErrorPanel: { gap: 7, marginBottom: 8 },
+  cameraErrorActions: { flexDirection: "row", gap: 8 },
+  cameraErrorButton: { minHeight: 32, paddingHorizontal: 11, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,177,177,0.12)", borderWidth: 1, borderColor: "rgba(255,177,177,0.24)" },
+  cameraErrorButtonText: { color: "#FFD5D5", fontSize: 11, fontWeight: "900" },
+  errorText: { color: "#FFB1B1", fontSize: 12, lineHeight: 17, fontWeight: "700" },
   permissionShell: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 28, backgroundColor: palette.background },
   permissionMark: { width: 76, height: 76, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: palette.cardStrong, marginBottom: 20 },
   permissionMarkText: { color: palette.teal, fontSize: 18, fontWeight: "900", letterSpacing: 1 },

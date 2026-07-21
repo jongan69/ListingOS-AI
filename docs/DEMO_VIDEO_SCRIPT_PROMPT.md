@@ -1,12 +1,16 @@
 # Demo Video Script Generation Prompt
 
+> **Status: superseded prompt record.** It produced the pre-publication script, not the
+> video currently attached to Devpost. Current media and replacement metadata live in
+> [`../ListingOS-Hackathon-Demo-Assets/final-renders/README.md`](../ListingOS-Hackathon-Demo-Assets/final-renders/README.md).
+
 Purpose: a single self-contained prompt for generating the OpenAI Build Week demo video script for ListingOS, plus the grounded fact pack that keeps the generated script inside verified claims.
 
 How to use: paste everything between the `PROMPT START` and `PROMPT END` markers into a fresh model session. The fact pack is embedded inside the prompt on purpose — do not strip it, because it is the only thing preventing a generated script from inventing features ListingOS does not ship.
 
 Companion docs: [Submission claims](CLAIMS.md), [Devpost submission pack](DEVPOST_SUBMISSION.md), [Demo recording checklist](DEMO_RECORDING.md), [Monetization plan](MONETIZATION.md).
 
-**Output of this prompt:** [`ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md`](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md) is the script this prompt produced, and it is the canonical script. Re-run this prompt only if the script needs regenerating from scratch; otherwise edit the script directly and keep [`PRODUCTION_PLAN.md`](../ListingOS-Hackathon-Demo-Assets/PRODUCTION_PLAN.md) in sync.
+**Historical output:** [`ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md`](../ListingOS-Hackathon-Demo-Assets/DEMO_VIDEO_SCRIPT_V2.md) is the superseded script this prompt produced. Do not regenerate the current submission video from this prompt.
 
 ---
 
