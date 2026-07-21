@@ -1,0 +1,145 @@
+# RevenueCat
+
+Single source of truth for billing. Replaces the five overlapping RevenueCat documents
+that described the pre-2026-07-21 broken state.
+
+**Project:** ListingOS (`89a32260`) · **Offering:** `default` (`ofrng180f676205`)
+
+---
+
+## 1. The contract
+
+Do not let these drift. Code and dashboard must agree.
+
+| Plan | Entitlement | Product IDs (App Store / Test Store / Web) | Play Store |
+| --- | --- | --- | --- |
+| Starter | `starter` | `listingos_starter_monthly`, `listingos_starter_annual` | `listingos_starter:monthly`, `listingos_starter_annual:annual` |
+| Pro | `pro` | `listingos_pro_monthly`, `listingos_pro_annual` | `listingos_pro:monthly`, `listingos_pro_annual:annual` |
+| Studio | `studio` | `listingos_studio_monthly`, `listingos_studio_annual` | `listingos_studio:monthly`, `listingos_studio_annual:annual` |
+
+Free tier is app-side only; it has no product and no entitlement.
+
+Defined in: `src/config/billing.ts`, `src/shared/contracts.ts`.
+Consumed by: `src/lib/revenuecat.ts`, `src/components/billing-card.tsx`, `src/screens/dashboard-screen.tsx`.
+
+> Play Store IDs use colon-suffixed base-plan notation. That is correct for Play and must
+> **not** be normalised to the Apple format.
+
+---
+
+## 2. Apps and keys
+
+Public SDK keys are safe in client code. The secret key is not.
+
+| App | Key | Where it goes |
+| --- | --- | --- |
+| Test Store | `test_…` | `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` |
+| ListingOS (App Store) | `appl_…` | `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` |
+| ListingOS (Play Store) | `goog_…` | `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` |
+| ListingOS (RevenueCat Billing) | `rcb_…` | `EXPO_PUBLIC_REVENUECAT_WEB_API_KEY` |
+| Secret (REST) | `sk_…` | **Worker secret only** — never in `.env`, never in `eas.json` |
+
+### Environment variables
+
+| Variable | Purpose |
+| --- | --- |
+| `EXPO_PUBLIC_REVENUECAT_MODE` | `test` or `production`. Selects Test Store vs. platform store keys. |
+| `EXPO_PUBLIC_REVENUECAT_OFFERING_ID` | `default`. |
+| `EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE_IN_RELEASE` | Opts release builds into Test Store. Dev/preview only — never production. |
+| `EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS` | JSON map of hosted checkout URLs. Empty until Stripe is connected. |
+| `REVENUECAT_SECRET_API_KEY` | Worker secret. REST entitlement verification. |
+| `REVENUECAT_WEBHOOK_AUTH_TOKEN` | Worker secret. Validates inbound webhooks. |
+
+---
+
+## 3. Runtime behaviour by platform
+
+### Native (iOS / Android)
+
+`src/lib/revenuecat.ts` configures `react-native-purchases`, resolves the platform key,
+validates its prefix, and loads `customerInfo` + offerings.
+
+Test Store keys are rejected in release builds **unless**
+`EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE_IN_RELEASE=true`. Without that opt-in, an
+internal or preview build silently reports "catalog pending" — it is a release build, so
+`__DEV__` is false. This was the long-standing cause of that error.
+
+### Web
+
+Web never calls `react-native-purchases`. It uses hosted RevenueCat Web Purchase Links,
+gated on `EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS` containing at least one valid URL.
+With no links the paywall renders a notice and disables paid actions; metering still works.
+
+---
+
+## 4. Server-side trust
+
+A client claiming an entitlement is not proof of purchase. `worker/index.ts` only elevates
+a `billing_profiles` row when the source is `revenuecat_rest`, `revenuecat_webhook`, or
+`manual`.
+
+`BILLING_ENFORCEMENT_MODE=enforce` (current setting) means: **if `REVENUECAT_SECRET_API_KEY`
+is unset, a completed purchase still resolves to `free`.** The paywall appears to succeed
+and the entitlement never sticks. This is the highest-consequence, lowest-visibility
+failure mode in the billing path.
+
+Verify at any time:
+
+```bash
+curl -s https://seller-ai-platform.jonathang132298.workers.dev/health
+```
+
+```json
+{ "revenueCatSecretConfigured": true,
+  "revenueCatWebhookConfigured": true,
+  "billingEnforcementMode": "enforce" }
+```
+
+All three must be as shown. To repair: `npm run rc:finish`.
+
+---
+
+## 5. Status
+
+**Working:** offering package mapping across all four stores; entitlements attached to all
+15 products; real SDK keys in `.env` and every EAS profile; Test Store purchases on
+device; Worker REST + webhook verification.
+
+**Blocked — needs a person:**
+
+| Item | Why | Fix |
+| --- | --- | --- |
+| Web checkout | RevenueCat Billing has no Stripe account, so Web Purchase Links cannot be saved at all | Web → ListingOS (RevenueCat Billing) → Billing → connect Stripe |
+| App Store products show "Could not check" | App Store Connect credential sync | Re-enter ASC credentials in RevenueCat and re-sync |
+| Play Store products show "Not found" | App not published to a track with a matching package name | Publish to internal testing |
+
+None of the three block a Test Store demo.
+
+---
+
+## 6. Verification runbook
+
+```bash
+npm run rc:finish            # secret + deploy + verify server trust path
+npm run device:ios           # or device:android
+```
+
+On device, open the paywall and confirm:
+
+1. Six plans render with real prices — not the setup notice.
+2. Metro logs a `[RevenueCat]` line showing mode, key source, key prefix, offering, and
+   a non-zero package count.
+3. A Test Store purchase completes.
+4. The dashboard plan flips off Free.
+5. `GET /api/billing/summary` reports the expected active entitlement.
+
+Step 4 is the one that proves the server trust path; steps 1–3 only prove the client.
+
+---
+
+## 7. Rollback
+
+1. Clear `EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS` to disable web checkout.
+2. Detach the affected entitlement mapping in RevenueCat.
+3. Confirm the app falls back to the free plan.
+4. Re-attach one product family at a time, re-testing between each.

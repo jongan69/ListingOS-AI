@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 
 import { AppButton } from "@/components/app-button";
@@ -9,7 +9,6 @@ import { ScreenToolbar } from "@/components/screen-toolbar";
 import { SurfaceCard } from "@/components/surface-card";
 import { WebPageHead } from "@/components/web-page-head";
 import { appConfig } from "@/config/app";
-import { brand } from "@/config/brand";
 import { api } from "@/lib/api";
 import { type Palette } from "@/theme/palette";
 import { usePalette } from "@/theme/theme";
@@ -30,7 +29,9 @@ export default function MarketIndexRoute() {
   const [location, setLocation] = useState<LocationPoint | null>(null);
 
   useEffect(() => {
-    if (typeof navigator === "undefined" || !("geolocation" in navigator)) return;
+    // Browser geolocation only. Native defines `navigator`, so check the
+    // platform first rather than relying on the shape of the global.
+    if (Platform.OS !== "web" || typeof navigator === "undefined" || !navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (position) => setLocation({ lat: position.coords.latitude, lng: position.coords.longitude }),
       () => undefined,

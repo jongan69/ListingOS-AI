@@ -78,9 +78,12 @@ function normalizeThemePreference(raw: string | null) {
 }
 
 function getWebStorage() {
-  if (typeof window === "undefined") return null;
+  // Native defines `window` without `localStorage`, so check the platform.
+  // Every caller already guards on Platform.OS === "web"; this is defence in
+  // depth so a future caller cannot reintroduce a native crash here.
+  if (Platform.OS !== "web" || typeof window === "undefined") return null;
   try {
-    return window.localStorage;
+    return window.localStorage ?? null;
   } catch {
     return null;
   }

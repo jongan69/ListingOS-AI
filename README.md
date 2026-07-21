@@ -18,7 +18,7 @@ ListingOS began as a private Next.js prototype that explored post-listing audit 
 - Privacy page: [https://seller-ai-platform.jonathang132298.workers.dev/privacy](https://seller-ai-platform.jonathang132298.workers.dev/privacy)
 - Documentation map: [docs/README.md](docs/README.md)
 - Marketplace execution plan: [docs/LISTINGOS_MARKETPLACE_PLAN.md](docs/LISTINGOS_MARKETPLACE_PLAN.md)
-- Build Week audit: [docs/BUILD_WEEK_AUDIT.md](docs/BUILD_WEEK_AUDIT.md)
+- MVP final cut: [docs/MVP_FINAL_CUT_2026-07-21.md](docs/MVP_FINAL_CUT_2026-07-21.md)
 - Final submission checklist: [docs/SUBMISSION_CHECKLIST.md](docs/SUBMISSION_CHECKLIST.md)
 
 ## Current Status

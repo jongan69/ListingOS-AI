@@ -71,3 +71,10 @@ ListingOS-Hackathon-Demo-Assets/audio/*
 # local QA history and superseded media-tool runs
 ListingOS-Hackathon-Demo-Assets/screenshots/qa-attempts/
 ListingOS-Hackathon-Demo-Assets/clipcaption-projects/listingos-caption-pass-v1/
+
+# Build artifacts that must never be committed (deploy.tar.gz was tracked until 2026-07-21)
+*.tar.gz
+deploy.tar.gz
+
+# Local iOS crash captures
+artifacts/ios-crash-*/

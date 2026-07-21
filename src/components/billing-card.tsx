@@ -108,14 +108,13 @@ export function PaywallPanel({
         <View style={styles.setupNotice}>
           <Text selectable style={styles.setupTitle}>
             {Platform.OS === "web"
-              ? "Web checkout links not configured"
-              : "RevenueCat catalog pending in this build"}
+              ? "Checkout is available in the mobile app"
+              : "Subscriptions unavailable in this build"}
           </Text>
           <Text selectable style={styles.setupBody}>
             {Platform.OS === "web"
-              ? revenueCat?.errorMessage
-                ?? "Set EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS to enable hosted checkout from the web paywall."
-              : revenueCat?.errorMessage ?? "Install a native build with RevenueCat keys and a current offering to purchase. Usage metering still works."}
+              ? "Hosted web checkout is coming soon. Plans can be purchased today in the iOS and Android apps, and your usage and limits stay in sync across every platform."
+              : revenueCat?.errorMessage ?? "This build has no RevenueCat store keys or current offering. Usage metering still works."}
           </Text>
         </View>
       ) : null}

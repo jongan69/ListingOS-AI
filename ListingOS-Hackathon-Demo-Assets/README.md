@@ -17,8 +17,8 @@ not application runtime behavior.
    behind every number quoted on screen.
 4. **[`notes/README.md`](notes/README.md)** — QA evidence and archived planning history.
 
-Before publishing, clear the gates in [`../docs/BUILD_WEEK_AUDIT.md`](../docs/BUILD_WEEK_AUDIT.md)
-and [`../docs/SUBMISSION_CHECKLIST.md`](../docs/SUBMISSION_CHECKLIST.md).
+Before publishing, clear the gates in [`../docs/SUBMISSION_CHECKLIST.md`](../docs/SUBMISSION_CHECKLIST.md)
+and [`../docs/CLAIMS.md`](../docs/CLAIMS.md).
 
 ## Current State
 
@@ -85,4 +85,4 @@ device recordings, the published-listing capture, on-camera footage — is not.
 - [`../docs/CLAIMS.md`](../docs/CLAIMS.md) — binding claim boundary
 - [`../docs/DEVPOST_SUBMISSION.md`](../docs/DEVPOST_SUBMISSION.md)
 - [`../docs/DEMO_RECORDING.md`](../docs/DEMO_RECORDING.md)
-- [`../docs/BUILD_WEEK_AUDIT.md`](../docs/BUILD_WEEK_AUDIT.md)
+- [`../docs/SUBMISSION_CHECKLIST.md`](../docs/SUBMISSION_CHECKLIST.md)

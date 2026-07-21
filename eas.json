@@ -64,6 +64,27 @@
       "ios": {
         "resourceClass": "m-medium"
       }
+    },
+    "testflight-demo": {
+      "extends": "production",
+      "autoIncrement": true,
+      "channel": "production",
+      "environment": "production",
+      "env": {
+        "EXPO_USE_PRECOMPILED_MODULES": "0",
+        "LISTINGOS_APS_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_REVENUECAT_MODE": "test",
+        "EXPO_PUBLIC_REVENUECAT_IOS_API_KEY": "appl_sQQDNUjELgCuHSGAmxuhAjpQUFE",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY": "goog_gjIeAMtMLnBBGxqcvfomegXACKC",
+        "EXPO_PUBLIC_REVENUECAT_WEB_API_KEY": "rcb_ZgbhKStLeAfQbTllZFhJiXKJdIFk",
+        "EXPO_PUBLIC_REVENUECAT_OFFERING_ID": "default",
+        "EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS": "{\"starter\":{\"monthly\":\"\",\"annual\":\"\"},\"pro\":{\"monthly\":\"\",\"annual\":\"\"},\"studio\":{\"monthly\":\"\",\"annual\":\"\"}}",
+        "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY": "test_DZeWKJHLgAGlABARPHfHyobbpph",
+        "EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE_IN_RELEASE": "true"
+      },
+      "ios": {
+        "resourceClass": "m-medium"
+      }
     }
   },
   "submit": {
@@ -75,6 +96,11 @@
         "serviceAccountKeyPath": "./google-play-service-account-listingos.json",
         "track": "internal",
         "releaseStatus": "completed"
+      }
+    },
+    "testflight-demo": {
+      "ios": {
+        "ascAppId": "6791869174"
       }
     }
   }

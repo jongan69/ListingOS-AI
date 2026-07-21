@@ -1905,7 +1905,7 @@ app.get("/api/public/market/listings", async (c) => {
     pageCursor: c.req.query("pageCursor") ?? undefined,
   });
   const whereClauses: string[] = ["status = 'active'"];
-  const params: Array<string | number | null> = [];
+  const params: (string | number | null)[] = [];
   if (query.q) {
     whereClauses.push("(title LIKE ? OR description LIKE ?)");
     const pattern = `%${query.q}%`;

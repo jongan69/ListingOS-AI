@@ -147,7 +147,10 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
     }
 
     void Linking.getInitialURL().then(handleAuthReturn);
-    if (typeof window !== "undefined") {
+    // React Native defines a global `window`, but it has no `location`, so
+    // `typeof window !== "undefined"` is NOT a web check — it passes on native
+    // and then throws on `window.location.href`. Gate on Platform.OS instead.
+    if (Platform.OS === "web" && typeof window !== "undefined" && window.location) {
       handleAuthReturn(window.location.href);
     }
     const subscription = Linking.addEventListener("url", (event) => {
@@ -1552,10 +1555,6 @@ function connectedSessionReady(value: unknown) {
   return Boolean(value);
 }
 
-function getAuthSessionIdFromUrl(url: string) {
-  return parseAuthSessionFromUrl(url).authSessionId;
-}
-
 function parseAuthSessionFromUrl(url: string) {
   const result = {
     authSessionId: null as string | null,
@@ -1602,7 +1601,9 @@ function parseAuthSessionFromUrl(url: string) {
 }
 
 function clearAuthSessionFromUrl(url: string) {
-  if (typeof window === "undefined") return;
+  // Same trap as above: native has `window` but no `window.history`, so this
+  // must gate on the platform, not on the existence of `window`.
+  if (Platform.OS !== "web" || typeof window === "undefined" || !window.history) return;
   let resolved = null as string | null;
   try {
     const parsedUrl = new URL(url);

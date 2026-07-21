@@ -20,8 +20,14 @@ const webThemeSubscribers = new Set<(next: ColorScheme | null) => void>();
 const WEB_STORAGE_KEY = THEME_PREFERENCE_KEY;
 
 function readWebThemePreference() {
-  if (typeof window === "undefined") return null;
-  return normalizeStoredTheme(window.localStorage?.getItem(WEB_STORAGE_KEY) ?? null);
+  // Runs in a useState initializer on every platform. Native has `window` but
+  // no `localStorage`, so gate on the platform rather than on `window`.
+  if (Platform.OS !== "web" || typeof window === "undefined") return null;
+  try {
+    return normalizeStoredTheme(window.localStorage?.getItem(WEB_STORAGE_KEY) ?? null);
+  } catch {
+    return null;
+  }
 }
 
 function getSystemScheme(raw: ReturnType<typeof useColorScheme>): ColorScheme {
@@ -93,6 +99,13 @@ export function useColorSchemePreference(): ColorScheme {
 
   useEffect(() => {
     if (Platform.OS === "web") {
+      // Deliberate one-time flip after mount. The static web export prerenders
+      // with no `window`, so localStorage-backed theme is unknown server-side.
+      // Rendering "dark" until mounted keeps the first client render identical
+      // to the prerendered HTML and avoids a hydration mismatch; deriving this
+      // during render instead would reintroduce that mismatch for users whose
+      // stored preference is "light". Not a cascading-render bug.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setReady(true);
       return;
     }
