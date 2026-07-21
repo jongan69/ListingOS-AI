@@ -365,6 +365,8 @@ export function DraftDetailScreen() {
     },
   });
 
+  const [marketPublishUrl, setMarketPublishUrl] = useState<string | null>(null);
+
   const publishMutation = useMutation({
     mutationFn: async () => {
       if (isProofMode) {
@@ -417,6 +419,32 @@ export function DraftDetailScreen() {
       });
     },
   });
+  const marketPublishMutation = useMutation({
+    mutationFn: async () => {
+      if (isProofMode) {
+        throw new Error("Proof mode is intentionally non-mutating. Use the stored publish proof instead of sending a live ListingOS mutation.");
+      }
+      const saved = await api.patchDraft(apiContext, draftId!, buildDraftPatch());
+      queryClient.setQueryData(draftQueryKey, saved);
+      return api.publishMarketDraft(apiContext, draftId!, { destination: "listingos" });
+    },
+    onSuccess: (result) => {
+      setMarketPublishUrl(result.publicUrl);
+      showToast({
+        title: "ListingOS listing published",
+        message: "Your public marketplace draft is live and ready for buyers.",
+        tone: "success",
+      });
+    },
+    onError: (error) => {
+      showToast({
+        title: "Could not publish to ListingOS",
+        message: error instanceof Error ? error.message : "Try again.",
+        tone: "error",
+      });
+    },
+  });
+
   const selectedPricing = draft?.pricing.options.find((option) => option.strategy === selectedStrategy);
   const pricingEvidence = draft?.pricingEvidence;
   const identity = draft?.identity;
@@ -495,22 +523,41 @@ export function DraftDetailScreen() {
   const opportunityAudit = draft ? buildListingOpportunityAudit(draft, effectivePrice) : null;
   const footer = isProofMode ? (
     <AppButton label="Proof replay • no live changes" onPress={() => {}} disabled />
-  ) : publishedUrl ? (
-    <AppButton
-      label="View live listing"
-      accessibilityHint="Opens this listing on eBay"
-      onPress={() => Linking.openURL(publishedUrl)}
-    />
-  ) : draft?.status === "published" ? (
-    <AppButton label="Listing published" onPress={() => {}} disabled />
   ) : (
-    <AppButton
-      label={publishing ? "Publishing to eBay..." : publishLabel}
-      accessibilityHint="Saves, verifies, and publishes this listing to eBay"
-      onPress={() => publishMutation.mutate()}
-      loading={publishing}
-      disabled={!canPublish}
-    />
+    <View style={styles.footerStack}>
+      {marketPublishUrl ? (
+        <AppButton
+          label="Open ListingOS listing"
+          accessibilityHint="Opens the public ListingOS marketplace listing"
+          onPress={() => Linking.openURL(marketPublishUrl)}
+        />
+      ) : (
+        <AppButton
+          label={marketPublishMutation.isPending ? "Publishing to ListingOS..." : "Publish to ListingOS beta"}
+          accessibilityHint="Publishes this draft to the ListingOS marketplace"
+          onPress={() => marketPublishMutation.mutate()}
+          loading={marketPublishMutation.isPending}
+          tone="secondary"
+        />
+      )}
+      {publishedUrl ? (
+        <AppButton
+          label="View live listing"
+          accessibilityHint="Opens this listing on eBay"
+          onPress={() => Linking.openURL(publishedUrl)}
+        />
+      ) : draft?.status === "published" ? (
+        <AppButton label="Listing published" onPress={() => {}} disabled />
+      ) : (
+        <AppButton
+          label={publishing ? "Publishing to eBay..." : publishLabel}
+          accessibilityHint="Saves, verifies, and publishes this listing to eBay"
+          onPress={() => publishMutation.mutate()}
+          loading={publishing}
+          disabled={!canPublish}
+        />
+      )}
+    </View>
   );
 
   async function refreshDraft() {
@@ -1899,6 +1946,9 @@ const createStyles = (palette: Palette) => StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     flexWrap: "wrap",
+  },
+  footerStack: {
+    gap: 10,
   },
   statBubble: {
     minWidth: 96,

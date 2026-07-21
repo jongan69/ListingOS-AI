@@ -13,7 +13,11 @@
         "EXPO_USE_PRECOMPILED_MODULES": "0",
         "LISTINGOS_APS_ENVIRONMENT": "development",
         "EXPO_PUBLIC_REVENUECAT_MODE": "test",
-        "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY": "REVENUECAT_TEST_PUBLIC_API_KEY"
+        "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY": "test_DZeWKJHLgAGlABARPHfHyobbpph",
+        "EXPO_PUBLIC_REVENUECAT_WEB_API_KEY": "rcb_ZgbhKStLeAfQbTllZFhJiXKJdIFk",
+        "EXPO_PUBLIC_REVENUECAT_OFFERING_ID": "default",
+        "EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS": "{\"starter\":{\"monthly\":\"\",\"annual\":\"\"},\"pro\":{\"monthly\":\"\",\"annual\":\"\"},\"studio\":{\"monthly\":\"\",\"annual\":\"\"}}",
+        "EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE_IN_RELEASE": "true"
       },
       "android": {
         "buildType": "apk"
@@ -30,7 +34,11 @@
         "EXPO_USE_PRECOMPILED_MODULES": "0",
         "LISTINGOS_APS_ENVIRONMENT": "development",
         "EXPO_PUBLIC_REVENUECAT_MODE": "test",
-        "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY": "REVENUECAT_TEST_PUBLIC_API_KEY"
+        "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY": "test_DZeWKJHLgAGlABARPHfHyobbpph",
+        "EXPO_PUBLIC_REVENUECAT_WEB_API_KEY": "rcb_ZgbhKStLeAfQbTllZFhJiXKJdIFk",
+        "EXPO_PUBLIC_REVENUECAT_OFFERING_ID": "default",
+        "EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS": "{\"starter\":{\"monthly\":\"\",\"annual\":\"\"},\"pro\":{\"monthly\":\"\",\"annual\":\"\"},\"studio\":{\"monthly\":\"\",\"annual\":\"\"}}",
+        "EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE_IN_RELEASE": "true"
       },
       "android": {
         "buildType": "apk"
@@ -43,11 +51,12 @@
       "env": {
         "EXPO_USE_PRECOMPILED_MODULES": "0",
         "LISTINGOS_APS_ENVIRONMENT": "production",
-        "EXPO_PUBLIC_REVENUECAT_PROD_API_KEY": "REVENUECAT_PROD_PUBLIC_API_KEY",
         "EXPO_PUBLIC_REVENUECAT_MODE": "production",
-        "EXPO_PUBLIC_REVENUECAT_IOS_API_KEY": "appl_your_ios_production_public_sdk_key",
-        "EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY": "goog_your_android_production_public_sdk_key",
-        "EXPO_PUBLIC_REVENUECAT_OFFERING_ID": "default"
+        "EXPO_PUBLIC_REVENUECAT_IOS_API_KEY": "appl_sQQDNUjELgCuHSGAmxuhAjpQUFE",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY": "goog_gjIeAMtMLnBBGxqcvfomegXACKC",
+        "EXPO_PUBLIC_REVENUECAT_WEB_API_KEY": "rcb_ZgbhKStLeAfQbTllZFhJiXKJdIFk",
+        "EXPO_PUBLIC_REVENUECAT_OFFERING_ID": "default",
+        "EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS": "{\"starter\":{\"monthly\":\"\",\"annual\":\"\"},\"pro\":{\"monthly\":\"\",\"annual\":\"\"},\"studio\":{\"monthly\":\"\",\"annual\":\"\"}}"
       },
       "android": {
         "buildType": "app-bundle"

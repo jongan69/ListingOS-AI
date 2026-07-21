@@ -86,6 +86,112 @@ export const SessionStateSchema = z.object({
   errorMessage: z.string().nullable().optional(),
 });
 
+export const MarketListingStateSchema = z.enum(["draft", "active", "sold", "hidden", "archived"]);
+export const MarketMessageSenderSchema = z.enum(["seller", "buyer"]);
+export const PublishDestinationSchema = z.enum(["ebay", "listingos", "both"]);
+
+export const MarketFeedQuerySchema = z.object({
+  q: z.string().optional(),
+  category: z.string().optional(),
+  radiusMiles: z.coerce.number().positive().max(250).optional(),
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
+  pageCursor: z.string().optional(),
+});
+
+export const PublicMarketListingSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  sellerUsername: z.string(),
+  draftId: z.string().nullable().default(null),
+  title: z.string(),
+  description: z.string(),
+  status: MarketListingStateSchema,
+  price: z.number().min(0),
+  currency: z.string().default("USD"),
+  locationLabel: z.string().nullable().default(null),
+  latitude: z.number().nullable().default(null),
+  longitude: z.number().nullable().default(null),
+  category: z.string().nullable().default(null),
+  photoUrls: z.array(z.string()).default([]),
+  distanceMiles: z.number().nullable().default(null),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  publicUrl: z.string(),
+  threadId: z.string().nullable().default(null),
+});
+
+export const MarketThreadSchema = z.object({
+  id: z.string(),
+  listingId: z.string(),
+  listingSlug: z.string(),
+  listingTitle: z.string(),
+  status: z.enum(["active", "blocked", "closed"]),
+  buyerEmailMasked: z.string().default("buyer@listingos.market"),
+  lastMessageAt: z.string().nullable().default(null),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  messages: z.array(
+    z.object({
+      id: z.string(),
+      threadId: z.string(),
+      senderType: MarketMessageSenderSchema,
+      body: z.string().min(1).max(1800),
+      createdAt: z.string(),
+    }),
+  ).default([]),
+});
+
+export const MarketBlockSchema = z.object({
+  id: z.string(),
+  listingId: z.string(),
+  reason: z.string(),
+  createdAt: z.string(),
+});
+
+export const MarketReportSchema = z.object({
+  id: z.string(),
+  listingId: z.string(),
+  reason: z.string(),
+  details: z.record(z.string(), z.unknown()).default({}),
+  reporter: z.string().nullable().default(null),
+  createdAt: z.string(),
+});
+
+export const MarketFeedPageSchema = z.object({
+  items: z.array(PublicMarketListingSchema),
+  nextCursor: z.string().nullable().default(null),
+  total: z.number().int().nonnegative().default(0),
+  request: MarketFeedQuerySchema.default({}),
+});
+
+export const SessionEmailStartSchema = z.object({
+  email: z.string().email(),
+});
+
+export const SessionEmailVerifySchema = z.object({
+  sessionToken: z.string().min(10),
+  email: z.string().email(),
+  verificationCode: z.string().length(6),
+});
+
+export const MarketMessageSchema = z.object({
+  body: z.string().min(1).max(1800),
+  threadId: z.string().optional(),
+});
+
+export const MarketInquiryStartSchema = z.object({
+  email: z.string().email(),
+  message: z.string().min(1).max(1200),
+});
+
+export const MarketReportRequestSchema = z.object({
+  listingId: z.string(),
+  reason: z.string().max(140),
+  details: z.record(z.string(), z.unknown()).default({}),
+  isBlockRequest: z.boolean().optional(),
+});
+
 export const UploadBatchSchema = z.object({
   id: z.string(),
   marketplaceId: z.string(),
@@ -491,3 +597,12 @@ export type RevenueCatWebhookTraceItem = z.infer<typeof RevenueCatWebhookTraceIt
 export type RevenueCatWebhookTraceResponse = z.infer<typeof RevenueCatWebhookTraceResponseSchema>;
 export type CameraSessionCreateInput = z.input<typeof CameraSessionCreateInputSchema>;
 export type CameraSession = z.infer<typeof CameraSessionSchema>;
+export type MarketFeedQuery = z.input<typeof MarketFeedQuerySchema>;
+export type PublicMarketListing = z.infer<typeof PublicMarketListingSchema>;
+export type MarketFeedPage = z.infer<typeof MarketFeedPageSchema>;
+export type MarketThread = z.infer<typeof MarketThreadSchema>;
+export type MarketMessage = z.infer<typeof MarketMessageSchema>;
+export type MarketBlock = z.infer<typeof MarketBlockSchema>;
+export type MarketReport = z.infer<typeof MarketReportSchema>;
+export type MarketInquiryStartInput = z.input<typeof MarketInquiryStartSchema>;
+export type MarketReportRequest = z.input<typeof MarketReportRequestSchema>;

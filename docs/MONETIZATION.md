@@ -232,9 +232,27 @@ RevenueCat project state as of July 20, 2026:
   - `listingos_starter_annual` at `$149.99/yr`
   - `listingos_pro_monthly` at `$49.99/mo`
   - `listingos_pro_annual` at `$499.99/yr`
-  - `listingos_studio_monthly` at `$149.99/mo`
-  - `listingos_studio_annual` at `$1,499.99/yr`
+- `listingos_studio_monthly` at `$149.99/mo`
+- `listingos_studio_annual` at `$1,499.99/yr`
 - Product-to-entitlement attachment completed for all six Test Store products.
+
+## Web Checkout Links (RevenueCat Web)
+
+ListingOS web billing currently uses RevenueCat Web Purchase Links for checkout:
+
+- `EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS` is required in web-facing profiles.
+- Configure per-plan, per-term hosted checkout URLs in the JSON format expected by
+  the app config parser.
+- Keep native iOS/Android unchanged; they continue to use `react-native-purchases`
+  and store-based entitlement sync.
+
+Expected format:
+
+```text
+EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS={"starter":{"monthly":"https://...","annual":"https://..."},"pro":{"monthly":"https://...","annual":"https://..."},"studio":{"monthly":"https://...","annual":"https://..."}}
+```
+
+Entitlement elevation remains server-controlled through Worker verification.
 
 Still required before production store purchases:
 

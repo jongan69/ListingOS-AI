@@ -8,6 +8,7 @@ This is the source-of-truth map for the public `ListingOS-AI` repository. Start 
 - [Architecture](ARCHITECTURE.md) - mobile, Worker, storage, queue, and external-service boundaries.
 - [Operations](OPERATIONS.md) - environment setup, deployment, troubleshooting, and safety rules.
 - [Release](RELEASE.md) - native builds, OTA updates, demo packaging, and device validation.
+- [RevenueCat web checkout links](REVENUECAT_WEB_PURCHASE_LINKS.md) - hosted web checkout implementation and trust boundary.
 
 ## Product And Engineering
 
@@ -19,6 +20,7 @@ This is the source-of-truth map for the public `ListingOS-AI` repository. Start 
 - [Analytics](ANALYTICS.md) - AI usage, latency, cost, and margin instrumentation.
 - [Monetization](MONETIZATION.md) - entitlement and usage-metering strategy.
 - [RevenueCat production](REVENUECAT_PRODUCTION.md) - production catalog and webhook configuration.
+- [RevenueCat reverse engineering](REVENUECAT_REVERSE_ENGINEERING_2026-07-20.md) - evidence-backed implementation notes by surface.
 
 ## Mobile And Platform
 

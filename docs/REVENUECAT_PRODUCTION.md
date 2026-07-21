@@ -22,6 +22,7 @@ EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=appl_...
 EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=goog_...
 EXPO_PUBLIC_REVENUECAT_OFFERING_ID=default
 EXPO_PUBLIC_REVENUECAT_PROD_API_KEY=      # optional transition fallback only
+EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS={"starter":{"monthly":"","annual":""},"pro":{"monthly":"","annual":""},"studio":{"monthly":"","annual":""}}
 ```
 
 Apply Worker secrets in Cloudflare (never as `EXPO_PUBLIC_*`):
@@ -77,6 +78,10 @@ EXPO_PUBLIC_REVENUECAT_OFFERING_ID=default
 Test Store mode is rejected outside `__DEV__` builds. If a release build has
 no platform production key, the app shows the subscription catalog as
 unconfigured instead of initializing RevenueCat with the wrong key.
+
+For web builds, define `EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS` with valid
+hosted checkout links per plan and term. Empty/missing links intentionally keep
+the web paywall in configuration-pending mode until checkout infrastructure is ready.
 
 ## Worker verification and webhooks
 

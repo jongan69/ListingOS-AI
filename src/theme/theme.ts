@@ -17,6 +17,12 @@ let hydrated = false;
 let webThemePreference: ColorScheme | null = null;
 
 const webThemeSubscribers = new Set<(next: ColorScheme | null) => void>();
+const WEB_STORAGE_KEY = THEME_PREFERENCE_KEY;
+
+function readWebThemePreference() {
+  if (typeof window === "undefined") return null;
+  return normalizeStoredTheme(window.localStorage?.getItem(WEB_STORAGE_KEY) ?? null);
+}
 
 function getSystemScheme(raw: ReturnType<typeof useColorScheme>): ColorScheme {
   return raw === "light" ? "light" : "dark";
@@ -37,7 +43,9 @@ function setWebTheme(next: ColorScheme | null) {
 
 function useWebThemePreference(systemSchemeRaw: ReturnType<typeof useColorScheme>) {
   const systemScheme = getSystemScheme(systemSchemeRaw);
-  const [manualScheme, setManualScheme] = useState<ColorScheme | null>(() => webThemePreference);
+  const [manualScheme, setManualScheme] = useState<ColorScheme | null>(() =>
+    webThemePreference ?? readWebThemePreference(),
+  );
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
@@ -84,7 +92,11 @@ export function useColorSchemePreference(): ColorScheme {
   const webScheme = useWebThemePreference(systemScheme);
 
   useEffect(() => {
-    if (Platform.OS === "web" || hydrated) return;
+    if (Platform.OS === "web") {
+      setReady(true);
+      return;
+    }
+    if (hydrated) return;
 
     let cancelled = false;
     getThemePreference().then((stored) => {
@@ -99,7 +111,7 @@ export function useColorSchemePreference(): ColorScheme {
     };
   }, []);
 
-  if (Platform.OS === "web") return webScheme;
+  if (Platform.OS === "web") return ready ? webScheme : "dark";
 
   if (!ready) return "dark";
   return systemScheme === "light" ? "light" : "dark";
@@ -121,6 +133,8 @@ export function useThemeToggle() {
   const setScheme = useCallback((next: ColorScheme) => {
     if (Platform.OS === "web") {
       setWebTheme(next);
+      void setThemePreference(next);
+      return;
     }
 
     Appearance.setColorScheme(next);

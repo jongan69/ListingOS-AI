@@ -1,14 +1,17 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useMemo } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/app-button";
 import { AppGlass } from "@/components/app-glass";
 import { billingPlans } from "@/config/billing";
-import type { PurchasesPackage, RevenueCatState } from "@/lib/revenuecat";
+import type { PurchasesPackage, RevenueCatState, RevenueCatWebPurchaseLinks } from "@/lib/revenuecat";
 import type { BillingSummary } from "@/shared/contracts";
 import { type Palette } from "@/theme/palette";
 import { usePalette } from "@/theme/theme";
+
+type BillingPlanId = "starter" | "pro" | "studio";
+type RevenueCatPurchaseTerm = "monthly" | "annual";
 
 export function BillingCard({
   billing,
@@ -68,6 +71,7 @@ export function PaywallPanel({
   onPurchase,
   onRestore,
   onClose,
+  onWebPurchase,
 }: {
   billing?: BillingSummary;
   revenueCat: RevenueCatState | null;
@@ -75,16 +79,21 @@ export function PaywallPanel({
   onPurchase: (pkg: PurchasesPackage) => void;
   onRestore: () => void;
   onClose: () => void;
+  onWebPurchase?: (plan: BillingPlanId, term: RevenueCatPurchaseTerm, checkoutUrl: string) => void;
 }) {
   const palette = usePalette();
   const styles = useMemo(() => createStyles(palette), [palette]);
-  const nativeReady = Boolean(revenueCat?.configured && revenueCat.packages.length > 0);
+  const isWeb = Platform.OS === "web";
+  const platformSupported = Boolean(revenueCat?.platformSupported ?? (Platform.OS === "ios" || Platform.OS === "android"));
+  const nativeReady = Boolean(platformSupported && revenueCat?.configured && revenueCat.packages.length > 0);
+  const hasWebCheckout = hasWebCheckoutLinks(revenueCat?.webPurchaseLinks);
+  const isSetupRequired = isWeb ? !hasWebCheckout : !nativeReady;
   const packageByProduct = new Map(
     (revenueCat?.packages ?? []).map((pkg) => [normalizePlanProductId(pkg.product.identifier), pkg]),
   );
 
   return (
-    <View style={styles.paywall}>
+      <View style={styles.paywall}>
       <View style={styles.paywallHeader}>
         <Text selectable style={styles.paywallEyebrow}>RevenueCat subscriptions</Text>
         <Pressable accessibilityRole="button" onPress={onClose}>
@@ -95,11 +104,18 @@ export function PaywallPanel({
       <Text selectable style={styles.paywallBody}>
         Free gets you to the aha moment. Paid plans unlock more monthly AI listings, autopublish, and higher-volume workflow.
       </Text>
-      {!nativeReady ? (
+      {!platformSupported || isSetupRequired ? (
         <View style={styles.setupNotice}>
-          <Text selectable style={styles.setupTitle}>RevenueCat catalog pending in this build</Text>
+          <Text selectable style={styles.setupTitle}>
+            {Platform.OS === "web"
+              ? "Web checkout links not configured"
+              : "RevenueCat catalog pending in this build"}
+          </Text>
           <Text selectable style={styles.setupBody}>
-            {revenueCat?.errorMessage ?? "Install a native build with RevenueCat keys and a current offering to purchase. Usage metering still works."}
+            {Platform.OS === "web"
+              ? revenueCat?.errorMessage
+                ?? "Set EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS to enable hosted checkout from the web paywall."
+              : revenueCat?.errorMessage ?? "Install a native build with RevenueCat keys and a current offering to purchase. Usage metering still works."}
           </Text>
         </View>
       ) : null}
@@ -108,6 +124,9 @@ export function PaywallPanel({
           const info = billingPlans[plan];
           const monthlyPackage = packageByProduct.get(`listingos_${plan}_monthly`);
           const annualPackage = packageByProduct.get(`listingos_${plan}_annual`);
+          const canOpenCheckout = isWeb;
+          const monthlyCheckoutLink = getWebCheckoutLink(plan, "monthly", revenueCat?.webPurchaseLinks);
+          const annualCheckoutLink = getWebCheckoutLink(plan, "annual", revenueCat?.webPurchaseLinks);
           return (
             <View key={plan} style={[styles.planCard, billing?.plan === plan ? styles.planCardActive : null]}>
               <View style={styles.planTop}>
@@ -119,24 +138,49 @@ export function PaywallPanel({
                 <Text selectable key={benefit} style={styles.benefit}>- {benefit}</Text>
               ))}
               <View style={styles.planActions}>
-                <PlanButton
-                  disabled={!monthlyPackage}
-                  label={monthlyPackage?.product.priceString ?? info.monthlyPrice}
+                  <PlanButton
+                  disabled={canOpenCheckout
+                    ? !monthlyCheckoutLink
+                    : !nativeReady || !monthlyPackage}
+                  label={info.monthlyPrice}
                   loading={purchasingPackageId === monthlyPackage?.identifier}
-                  onPress={() => monthlyPackage ? onPurchase(monthlyPackage) : undefined}
+                  onPress={() => {
+                    if (canOpenCheckout && monthlyCheckoutLink) {
+                      onWebPurchase?.(plan, "monthly", monthlyCheckoutLink);
+                      return;
+                    }
+                    if (monthlyPackage) {
+                      onPurchase(monthlyPackage);
+                    }
+                  }}
                 />
                 <PlanButton
-                  disabled={!annualPackage}
-                  label={annualPackage?.product.priceString ?? info.annualPrice}
+                  disabled={canOpenCheckout
+                    ? !annualCheckoutLink
+                    : !nativeReady || !annualPackage}
+                  label={info.annualPrice}
                   loading={purchasingPackageId === annualPackage?.identifier}
-                  onPress={() => annualPackage ? onPurchase(annualPackage) : undefined}
+                  onPress={() => {
+                    if (canOpenCheckout && annualCheckoutLink) {
+                      onWebPurchase?.(plan, "annual", annualCheckoutLink);
+                      return;
+                    }
+                    if (annualPackage) {
+                      onPurchase(annualPackage);
+                    }
+                  }}
                 />
               </View>
             </View>
           );
         })}
       </View>
-      <AppButton label="Restore purchases" tone="secondary" onPress={onRestore} />
+      <AppButton
+        disabled={!platformSupported}
+        label={Platform.OS === "web" ? "Refresh subscription status" : "Restore purchases"}
+        tone="secondary"
+        onPress={onRestore}
+      />
     </View>
   );
 }
@@ -146,6 +190,18 @@ function normalizePlanProductId(identifier: string) {
   if (!basePlan) return identifier;
   if (basePlan === "annual" && baseId.endsWith("_annual")) return baseId;
   return `${baseId}_${basePlan}`;
+}
+
+function hasWebCheckoutLinks(links?: RevenueCatWebPurchaseLinks): boolean {
+  return Object.values(links ?? {}).some((entry) => Boolean(entry?.monthly || entry?.annual));
+}
+
+function getWebCheckoutLink(
+  plan: BillingPlanId,
+  term: RevenueCatPurchaseTerm,
+  links?: RevenueCatWebPurchaseLinks,
+): string | null {
+  return links?.[plan]?.[term] ?? null;
 }
 
 function PlanButton({ label, disabled, loading, onPress }: {

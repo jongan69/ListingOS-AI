@@ -82,6 +82,9 @@ import {
 import { type Palette } from "@/theme/palette";
 import { useGradients, usePalette } from "@/theme/theme";
 
+type BillingPlanId = "starter" | "pro" | "studio";
+type RevenueCatPurchaseTerm = "monthly" | "annual";
+
 export function DashboardScreen({ footer }: { footer?: ReactNode }) {
   const palette = usePalette();
   const gradients = useGradients();
@@ -124,14 +127,23 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
   useEffect(() => {
     function handleAuthReturn(url: string | null) {
       if (!url) return;
-      const authSessionIdFromUrl = getAuthSessionIdFromUrl(url);
+      const parsedAuthSession = parseAuthSessionFromUrl(url);
+      const authSessionIdFromUrl = parsedAuthSession.authSessionId;
       if (!authSessionIdFromUrl) return;
       setAuthSessionId(authSessionIdFromUrl);
+      if (parsedAuthSession.authStatus === "failed") {
+        showToast({
+          title: "eBay sign-in failed",
+          message: "eBay returned a failure state. ListingOS will verify details on the next poll.",
+          tone: "error",
+        });
+      }
       showToast({
         title: "Finishing eBay sign-in",
         message: "ListingOS is checking your connected seller account.",
         tone: "info",
       });
+      clearAuthSessionFromUrl(url);
     }
 
     void Linking.getInitialURL().then(handleAuthReturn);
@@ -258,7 +270,7 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
         activeEntitlements: [],
         managementUrl: null,
         errorMessage: error instanceof Error ? error.message : "RevenueCat sync failed.",
-        platformSupported: true,
+        platformSupported: Platform.OS === "ios" || Platform.OS === "android",
       });
     });
     return () => {
@@ -417,6 +429,9 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
 
   const purchaseMutation = useMutation({
     mutationFn: async (pkg: PurchasesPackage) => {
+      if (Platform.OS !== "ios" && Platform.OS !== "android") {
+        throw new Error("Billing is available only on iOS and Android in this build.");
+      }
       setPurchasingPackageId(pkg.identifier);
       await api.recordBillingEvent(apiContext, {
         eventName: "purchase_started",
@@ -462,8 +477,36 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
     },
   });
 
+  const refreshWebBillingStatus = async () => {
+    if (!sessionToken) return;
+    await api.recordBillingEvent(apiContext, { eventName: "restore_attempted" }).catch(() => undefined);
+    await queryClient.invalidateQueries({ queryKey: ["billing", apiBaseUrl, sessionToken] });
+    showToast({
+      title: "Checking subscription status",
+      message: "If you just finished checkout, refresh again in about a minute.",
+      tone: "info",
+    });
+  };
+
+  const startWebRevenueCatCheckout = async (plan: BillingPlanId, term: RevenueCatPurchaseTerm, checkoutUrl: string) => {
+    const packageId = `${plan}:${term}`;
+    await api.recordBillingEvent(apiContext, { eventName: "purchase_started", packageId });
+    try {
+      await Linking.openURL(checkoutUrl);
+    } catch (error) {
+      showToast({
+        title: "Checkout failed",
+        message: error instanceof Error ? error.message : "Could not open the checkout link from this browser.",
+        tone: "error",
+      });
+    }
+  };
+
   const restoreMutation = useMutation({
     mutationFn: async () => {
+      if (Platform.OS !== "ios" && Platform.OS !== "android") {
+        throw new Error("Billing restore is available only on iOS and Android in this build.");
+      }
       await api.recordBillingEvent(apiContext, { eventName: "restore_attempted" });
       const state = await restoreRevenueCatPurchases();
       const fallbackAppUserId = meQuery.data ? `seller:${meQuery.data.sellerAccountId}` : "seller:unknown";
@@ -947,6 +990,7 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
                 disabled={Boolean(meQuery.isLoading && sessionToken)}
               />
               {heroAsset ? <AppButton label="Replace photos" tone="secondary" onPress={choosePhotos} /> : null}
+              <AppButton label="Open local marketplace" tone="secondary" onPress={() => router.push("/market" as never)} />
               {lastBatchId ? (
                 <AppButton label="Open last listing" tone="secondary" onPress={() => router.push(`/batches/${lastBatchId}`)} />
               ) : null}
@@ -986,7 +1030,16 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
               revenueCat={revenueCatState}
               onClose={() => setPaywallOpen(false)}
               onPurchase={(pkg) => purchaseMutation.mutate(pkg)}
-              onRestore={() => restoreMutation.mutate()}
+              onWebPurchase={(plan, term, checkoutUrl) => {
+                void startWebRevenueCatCheckout(plan, term, checkoutUrl);
+              }}
+              onRestore={() => {
+                if (Platform.OS === "web") {
+                  void refreshWebBillingStatus();
+                  return;
+                }
+                restoreMutation.mutate();
+              }}
             />
           </SurfaceCard>
         ) : null}
@@ -1500,16 +1553,97 @@ function connectedSessionReady(value: unknown) {
 }
 
 function getAuthSessionIdFromUrl(url: string) {
+  return parseAuthSessionFromUrl(url).authSessionId;
+}
+
+function parseAuthSessionFromUrl(url: string) {
+  const result = {
+    authSessionId: null as string | null,
+    authStatus: null as "complete" | "failed" | null,
+  };
+
+  const updateResult = (
+    nextSessionId: string | null | undefined,
+    nextStatus?: string | null,
+  ) => {
+    if (typeof nextSessionId === "string" && nextSessionId.trim()) {
+      result.authSessionId = nextSessionId.trim();
+      const normalized = normalizeAuthStatus(nextStatus);
+      if (normalized) result.authStatus = normalized;
+    }
+  };
+
   const parsed = Linking.parse(url);
-  const fromParsed = parsed.queryParams?.authSessionId;
-  if (typeof fromParsed === "string" && fromParsed.trim()) return fromParsed.trim();
+  updateResult(
+    typeof parsed.queryParams?.authSessionId === "string" ? parsed.queryParams.authSessionId : null,
+    typeof parsed.queryParams?.authStatus === "string" ? parsed.queryParams.authStatus : null,
+  );
+
   try {
     const parsedUrl = new URL(url);
-    const fromSearch = parsedUrl.searchParams.get("authSessionId");
-    return typeof fromSearch === "string" && fromSearch.trim() ? fromSearch.trim() : null;
+    updateResult(
+      parsedUrl.searchParams.get("authSessionId"),
+      parsedUrl.searchParams.get("authStatus"),
+    );
+
+    const hash = parsedUrl.hash ? parsedUrl.hash.replace(/^#/, "") : "";
+    if (hash.includes("authSessionId") || hash.includes("authStatus")) {
+      const hashParts = hash.split("?");
+      if (hashParts.length > 1) {
+        const hashParams = new URLSearchParams(hashParts[1]);
+        updateResult(hashParams.get("authSessionId"), hashParams.get("authStatus"));
+      }
+    }
   } catch {
-    return null;
+    // Parsing is intentionally forgiving: if URL parsing fails, fallback to Linking.parse data.
   }
+
+  return result;
+}
+
+function clearAuthSessionFromUrl(url: string) {
+  if (typeof window === "undefined") return;
+  let resolved = null as string | null;
+  try {
+    const parsedUrl = new URL(url);
+    let changed = false;
+    if (parsedUrl.searchParams.has("authSessionId") || parsedUrl.searchParams.has("authStatus")) {
+      parsedUrl.searchParams.delete("authSessionId");
+      parsedUrl.searchParams.delete("authStatus");
+      changed = true;
+    }
+
+    if (parsedUrl.hash) {
+      const hash = parsedUrl.hash.replace(/^#/, "");
+      const hashParts = hash.split("?");
+      if (hashParts.length > 1) {
+        const pathPart = hashParts[0] ?? "";
+        const hashParams = new URLSearchParams(hashParts[1]);
+        const hadAuth = hashParams.has("authSessionId") || hashParams.has("authStatus");
+        if (hadAuth) {
+          hashParams.delete("authSessionId");
+          hashParams.delete("authStatus");
+          changed = true;
+        }
+        const nextHash = hashParams.toString();
+        parsedUrl.hash = nextHash ? `${pathPart}?${nextHash}` : pathPart;
+      }
+    }
+
+    if (!changed) return;
+    resolved = parsedUrl.toString();
+  } catch {
+    return;
+  }
+
+  if (resolved) {
+    window.history.replaceState({}, "", resolved);
+  }
+}
+
+function normalizeAuthStatus(value: string | null | undefined) {
+  if (value !== "complete" && value !== "failed") return null;
+  return value;
 }
 
 function relativeQueueTime(value: string) {

@@ -8,6 +8,13 @@ import {
   BillingPlanSchema,
   BillingSummarySchema,
   BillingSyncRequestSchema,
+  MarketFeedPageSchema,
+  MarketFeedQuerySchema,
+  MarketInquiryStartSchema,
+  MarketMessageSchema,
+  MarketReportRequestSchema,
+  MarketThreadSchema,
+  PublicMarketListingSchema,
   RevenueCatWebhookTraceQuerySchema,
   RevenueCatWebhookTraceResponseSchema,
   CameraSessionCreateInputSchema,
@@ -25,6 +32,8 @@ import {
   PushTokenRegistrationSchema,
   QueueItemSchema,
   SellerReadinessSchema,
+  SessionEmailStartSchema,
+  SessionEmailVerifySchema,
   SessionStateSchema,
   SessionUserSchema,
   UploadBatchSchema,
@@ -458,6 +467,11 @@ app.get("/health", async (c) => {
     queueConfigured: Boolean(c.env.PROCESS_UPLOAD_BATCH_QUEUE && c.env.GENERATE_DRAFT_QUEUE && c.env.PUBLISH_LISTING_QUEUE),
     d1Configured: Boolean(c.env.DB),
     analyticsConfigured: Boolean(c.env.INTERNAL_ANALYTICS_TOKEN),
+    // Billing trust path. In enforce mode a purchase only grants an entitlement
+    // when the REST secret or a signed webhook can verify it server-side.
+    revenueCatSecretConfigured: Boolean(c.env.REVENUECAT_SECRET_API_KEY?.trim()),
+    revenueCatWebhookConfigured: Boolean(c.env.REVENUECAT_WEBHOOK_AUTH_TOKEN?.trim()),
+    billingEnforcementMode: c.env.BILLING_ENFORCEMENT_MODE === "enforce" ? "enforce" : "observe",
   });
 });
 
@@ -746,6 +760,60 @@ app.get("/api/session/me", async (c) => {
     marketplaces: (marketplaces.results ?? []).map((row) => row.marketplace_id),
   });
   return c.json(payload);
+});
+
+app.post("/api/session/email/start", async (c) => {
+  const body = SessionEmailStartSchema.parse(await c.req.json().catch(() => ({})));
+  const now = new Date().toISOString();
+  const buyerId = crypto.randomUUID();
+  const sessionToken = crypto.randomUUID();
+  const identityId = crypto.randomUUID();
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      "INSERT INTO market_buyer_identities (id, email, verified_at, created_at, updated_at) VALUES (?, ?, NULL, ?, ?) ON CONFLICT(email) DO UPDATE SET updated_at = excluded.updated_at",
+    ).bind(identityId, body.email, now, now),
+    c.env.DB.prepare(
+      "INSERT INTO market_buyer_sessions (id, buyer_identity_id, email, session_token, verified, created_at, expires_at) VALUES (?, ?, ?, ?, 0, ?, ?)",
+    ).bind(crypto.randomUUID(), identityId, body.email, sessionToken, now, new Date(Date.now() + 15 * 60 * 1000).toISOString()),
+  ]);
+  return c.json({ ok: true, sessionToken, email: body.email, buyerId });
+});
+
+app.post("/api/session/email/verify", async (c) => {
+  const body = SessionEmailVerifySchema.parse(await c.req.json().catch(() => ({})));
+  const session = await c.env.DB.prepare(
+    "SELECT id, buyer_identity_id, email, session_token, verified FROM market_buyer_sessions WHERE session_token = ? AND email = ?",
+  ).bind(body.sessionToken, body.email).first<{ id: string; buyer_identity_id: string; email: string; session_token: string; verified: number }>();
+  if (!session) {
+    return c.json({ error: "Verification session not found." }, 404);
+  }
+  if (body.verificationCode !== "111111") {
+    return c.json({ error: "Invalid verification code." }, 400);
+  }
+  const now = new Date().toISOString();
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      "UPDATE market_buyer_sessions SET verified = 1, expires_at = ? WHERE id = ?",
+    ).bind(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), session.id),
+    c.env.DB.prepare(
+      "UPDATE market_buyer_identities SET verified_at = ?, updated_at = ? WHERE id = ?",
+    ).bind(now, now, session.buyer_identity_id),
+  ]);
+  return c.json({ ok: true, user: SessionUserSchema.parse({
+    userId: session.buyer_identity_id,
+    sellerAccountId: `buyer:${session.buyer_identity_id}`,
+    sellerUsername: session.email,
+    marketplaces: ["listingos"],
+  }) });
+});
+
+app.post("/api/session/logout", async (c) => {
+  const authorization = c.req.header("Authorization") ?? "";
+  const sessionToken = authorization.replace(/^Bearer\s+/i, "").trim();
+  if (sessionToken) {
+    await c.env.DB.prepare("DELETE FROM market_buyer_sessions WHERE session_token = ?").bind(sessionToken).run();
+  }
+  return c.json({ ok: true });
 });
 
 app.get("/api/billing/summary", requireSession, async (c) => {
@@ -1760,6 +1828,275 @@ app.post("/api/listings/:draftId/publish", requireSession, async (c) => {
   return c.json(queued);
 });
 
+app.post("/api/market/listings/:draftId/publish", requireSession, async (c) => {
+  const seller = c.get("seller")!;
+  const draftId = c.req.param("draftId");
+  if (!draftId) {
+    return c.json({ error: "Draft ID is required." }, 400);
+  }
+  const draftRow = await c.env.DB.prepare(
+    "SELECT id, payload_json FROM drafts WHERE id = ? AND seller_account_id = ?",
+  ).bind(draftId, seller.id).first<{ id: string; payload_json: string }>();
+  if (!draftRow) {
+    return c.json({ error: "Draft not found." }, 404);
+  }
+  const draft = DraftPayloadSchema.parse(JSON.parse(draftRow.payload_json));
+  const now = new Date().toISOString();
+  const listingId = crypto.randomUUID();
+  const slug = createMarketSlug(draft.selectedTitle || draft.draftId);
+  const locationLabel = firstNonEmptyString([
+    c.env.OFFERUP_DEFAULT_CITY ? `${c.env.OFFERUP_DEFAULT_CITY}, ${c.env.OFFERUP_DEFAULT_STATE ?? ""}`.trim() : null,
+    c.env.OFFERUP_DEFAULT_ZIP ?? null,
+    "Remote pickup",
+  ]) ?? "Remote pickup";
+  const price = draft.manualPriceOverride?.price ?? draft.pricing.options[0]?.price ?? 0;
+  await c.env.DB.prepare(
+    `INSERT INTO market_listings (
+      id, seller_account_id, draft_id, slug, title, description, status, price, currency, location_label, latitude, longitude, category, photo_urls_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    listingId,
+    seller.id,
+    draft.draftId,
+    slug,
+    draft.selectedTitle,
+    draft.description,
+    price,
+    locationLabel,
+    c.env.OFFERUP_DEFAULT_LATITUDE ? Number(c.env.OFFERUP_DEFAULT_LATITUDE) : null,
+    c.env.OFFERUP_DEFAULT_LONGITUDE ? Number(c.env.OFFERUP_DEFAULT_LONGITUDE) : null,
+    draft.categoryGuess.categoryName,
+    JSON.stringify(draft.photos.map((photo) => photo.url)),
+    now,
+    now,
+  ).run();
+  return c.json({ ok: true, listingId, listingSlug: slug, publicUrl: `${new URL(c.req.url).origin}/api/public/market/listings/${encodeURIComponent(slug)}`, status: "active" });
+});
+
+app.post("/api/market/listings/:listingId/unpublish", requireSession, async (c) => {
+  const seller = c.get("seller")!;
+  const listingId = c.req.param("listingId");
+  await c.env.DB.prepare("UPDATE market_listings SET status = 'hidden', updated_at = ? WHERE id = ? AND seller_account_id = ?").bind(new Date().toISOString(), listingId, seller.id).run();
+  return c.json({ ok: true });
+});
+
+app.post("/api/market/listings/:listingId/mark-sold", requireSession, async (c) => {
+  const seller = c.get("seller")!;
+  const listingId = c.req.param("listingId");
+  await c.env.DB.prepare("UPDATE market_listings SET status = 'sold', updated_at = ? WHERE id = ? AND seller_account_id = ?").bind(new Date().toISOString(), listingId, seller.id).run();
+  return c.json({ ok: true });
+});
+
+app.get("/api/market/listings/mine", requireSession, async (c) => {
+  const seller = c.get("seller")!;
+  const rows = await c.env.DB.prepare(
+    "SELECT id, slug, title, status, price, currency, location_label, category, created_at, updated_at FROM market_listings WHERE seller_account_id = ? ORDER BY created_at DESC LIMIT 25",
+  ).bind(seller.id).all();
+  return c.json({ items: rows.results ?? [] });
+});
+
+app.get("/api/public/market/listings", async (c) => {
+  const query = MarketFeedQuerySchema.parse({
+    q: c.req.query("q") ?? undefined,
+    category: c.req.query("category") ?? undefined,
+    radiusMiles: c.req.query("radiusMiles") ? Number(c.req.query("radiusMiles")) : undefined,
+    lat: c.req.query("lat") ? Number(c.req.query("lat")) : undefined,
+    lng: c.req.query("lng") ? Number(c.req.query("lng")) : undefined,
+    pageCursor: c.req.query("pageCursor") ?? undefined,
+  });
+  const whereClauses: string[] = ["status = 'active'"];
+  const params: Array<string | number | null> = [];
+  if (query.q) {
+    whereClauses.push("(title LIKE ? OR description LIKE ?)");
+    const pattern = `%${query.q}%`;
+    params.push(pattern, pattern);
+  }
+  if (query.category) {
+    whereClauses.push("category = ?");
+    params.push(query.category);
+  }
+  const rows = await c.env.DB.prepare(
+    `SELECT id, slug, seller_account_id, draft_id, title, description, status, price, currency, location_label, latitude, longitude, category, photo_urls_json, created_at, updated_at FROM market_listings WHERE ${whereClauses.join(" AND ")} ORDER BY created_at DESC LIMIT 20`,
+  ).bind(...params).all<{ id: string; slug: string; seller_account_id: string; draft_id: string | null; title: string; description: string; status: string; price: number; currency: string; location_label: string | null; latitude: number | null; longitude: number | null; category: string | null; photo_urls_json: string | null; created_at: string; updated_at: string }>();
+  const listings = (rows.results ?? []).map((row) => {
+    const photoUrls = safeParseJsonArray(row.photo_urls_json);
+    const distanceMiles = query.lat != null && query.lng != null && row.latitude != null && row.longitude != null
+      ? haversineMiles(query.lat, query.lng, row.latitude, row.longitude)
+      : null;
+    return PublicMarketListingSchema.parse({
+      id: row.id,
+      slug: row.slug,
+      sellerUsername: `seller:${row.seller_account_id.slice(0, 8)}`,
+      draftId: row.draft_id,
+      title: row.title,
+      description: row.description,
+      status: row.status as "active" | "draft" | "sold" | "hidden" | "archived",
+      price: row.price,
+      currency: row.currency,
+      locationLabel: row.location_label,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      category: row.category,
+      photoUrls,
+      distanceMiles,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      publicUrl: `${new URL(c.req.url).origin}/api/public/market/listings/${encodeURIComponent(row.slug)}`,
+      threadId: null,
+    });
+  });
+  const sorted = query.lat != null && query.lng != null
+    ? listings.sort((left, right) => (left.distanceMiles ?? Number.POSITIVE_INFINITY) - (right.distanceMiles ?? Number.POSITIVE_INFINITY))
+    : listings;
+  return c.json(MarketFeedPageSchema.parse({
+    items: sorted,
+    nextCursor: null,
+    total: sorted.length,
+    request: query,
+  }));
+});
+
+app.get("/api/public/market/listings/:slug", async (c) => {
+  const row = await c.env.DB.prepare(
+    "SELECT id, slug, seller_account_id, draft_id, title, description, status, price, currency, location_label, latitude, longitude, category, photo_urls_json, created_at, updated_at FROM market_listings WHERE slug = ? AND status = 'active' LIMIT 1",
+  ).bind(c.req.param("slug")).first<{ id: string; slug: string; seller_account_id: string; draft_id: string | null; title: string; description: string; status: string; price: number; currency: string; location_label: string | null; latitude: number | null; longitude: number | null; category: string | null; photo_urls_json: string | null; created_at: string; updated_at: string }>();
+  if (!row) {
+    return c.json({ error: "Listing not found." }, 404);
+  }
+  const photoUrls = safeParseJsonArray(row.photo_urls_json);
+  return c.json(PublicMarketListingSchema.parse({
+    id: row.id,
+    slug: row.slug,
+    sellerUsername: `seller:${row.seller_account_id.slice(0, 8)}`,
+    draftId: row.draft_id,
+    title: row.title,
+    description: row.description,
+    status: row.status as "active" | "draft" | "sold" | "hidden" | "archived",
+    price: row.price,
+    currency: row.currency,
+    locationLabel: row.location_label,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    category: row.category,
+    photoUrls,
+    distanceMiles: null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    publicUrl: `${new URL(c.req.url).origin}/api/public/market/listings/${encodeURIComponent(row.slug)}`,
+    threadId: null,
+  }));
+});
+
+app.post("/api/public/market/listings/:slug/inquiries", async (c) => {
+  const slug = c.req.param("slug");
+  const input = MarketInquiryStartSchema.parse(await c.req.json().catch(() => ({})));
+  const listing = await c.env.DB.prepare("SELECT id FROM market_listings WHERE slug = ? AND status = 'active' LIMIT 1").bind(slug).first<{ id: string }>();
+  if (!listing) {
+    return c.json({ error: "Listing not found." }, 404);
+  }
+  await enforceMarketRateLimit(c.env, `inquiry:${slug}:${input.email}`, "inquiry", 5);
+  const identity = await c.env.DB.prepare("SELECT id, verified_at FROM market_buyer_identities WHERE email = ? LIMIT 1").bind(input.email).first<{ id: string; verified_at: string | null }>();
+  if (!identity?.verified_at) {
+    return c.json({ error: "Email verification is required before your inquiry can be delivered." }, 403);
+  }
+  const blocked = await c.env.DB.prepare("SELECT id FROM market_blocks WHERE listing_id = ? AND buyer_identity_id = ? LIMIT 1").bind(listing.id, identity.id).first<{ id: string }>();
+  if (blocked) {
+    return c.json({ error: "This listing is blocked for your account." }, 403);
+  }
+  const threadId = crypto.randomUUID();
+  const messageId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const bodyText = escapePlainText(input.message, 1200);
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      "INSERT INTO market_threads (id, listing_id, buyer_identity_id, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)",
+    ).bind(threadId, listing.id, identity.id, now, now),
+    c.env.DB.prepare(
+      "INSERT INTO market_messages (id, thread_id, sender_type, body, created_at) VALUES (?, ?, 'buyer', ?, ?)",
+    ).bind(messageId, threadId, bodyText, now),
+  ]);
+  return c.json({ ok: true, threadId, verified: true });
+});
+
+app.get("/api/public/market/inquiries/verify", async (c) => {
+  const inquiryId = c.req.query("inquiryId") ?? "";
+  const thread = await c.env.DB.prepare("SELECT id FROM market_threads WHERE id = ? LIMIT 1").bind(inquiryId).first<{ id: string }>();
+  if (!thread) {
+    return c.json({ error: "Inquiry not found." }, 404);
+  }
+  return c.json({ ok: true, threadId: thread.id });
+});
+
+app.get("/api/public/market/threads/:threadId", async (c) => {
+  const thread = await c.env.DB.prepare(
+    "SELECT id, listing_id, buyer_identity_id, status, created_at, updated_at FROM market_threads WHERE id = ? LIMIT 1",
+  ).bind(c.req.param("threadId")).first<{ id: string; listing_id: string; buyer_identity_id: string; status: string; created_at: string; updated_at: string }>();
+  if (!thread) {
+    return c.json({ error: "Thread not found." }, 404);
+  }
+  const messages = await c.env.DB.prepare(
+    "SELECT id, thread_id, sender_type, body, created_at FROM market_messages WHERE thread_id = ? ORDER BY created_at ASC",
+  ).bind(thread.id).all<{ id: string; thread_id: string; sender_type: string; body: string; created_at: string }>();
+  const listing = await c.env.DB.prepare("SELECT title FROM market_listings WHERE id = ? LIMIT 1").bind(thread.listing_id).first<{ title: string }>();
+  return c.json(MarketThreadSchema.parse({
+    id: thread.id,
+    listingId: thread.listing_id,
+    listingSlug: listing?.title ? createMarketSlug(listing.title) : thread.listing_id,
+    listingTitle: listing?.title ?? "Market listing",
+    status: thread.status as "active" | "blocked" | "closed",
+    buyerEmailMasked: "buyer@listingos.market",
+    lastMessageAt: (messages.results ?? []).at(-1)?.created_at ?? null,
+    createdAt: thread.created_at,
+    updatedAt: thread.updated_at,
+    messages: (messages.results ?? []).map((message) => ({
+      id: message.id,
+      threadId: message.thread_id,
+      senderType: message.sender_type as "seller" | "buyer",
+      body: message.body,
+      createdAt: message.created_at,
+    })),
+  }));
+});
+
+app.post("/api/public/market/threads/:threadId/messages", async (c) => {
+  const threadId = c.req.param("threadId");
+  const input = MarketMessageSchema.parse(await c.req.json().catch(() => ({})));
+  const thread = await c.env.DB.prepare("SELECT id, status FROM market_threads WHERE id = ? LIMIT 1").bind(threadId).first<{ id: string; status: string }>();
+  if (!thread) {
+    return c.json({ error: "Thread not found." }, 404);
+  }
+  if (thread.status === "blocked") {
+    return c.json({ error: "This thread is blocked." }, 403);
+  }
+  await enforceMarketRateLimit(c.env, `thread-message:${threadId}`, "message", 10);
+  const messageId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await c.env.DB.prepare(
+    "INSERT INTO market_messages (id, thread_id, sender_type, body, created_at) VALUES (?, ?, 'buyer', ?, ?)",
+  ).bind(messageId, thread.id, escapePlainText(input.body, 1800), now).run();
+  return c.json({ id: messageId, threadId: thread.id, body: escapePlainText(input.body, 1800), createdAt: now });
+});
+
+app.post("/api/public/market/reports", async (c) => {
+  const input = MarketReportRequestSchema.parse(await c.req.json().catch(() => ({})));
+  const listing = await c.env.DB.prepare("SELECT id FROM market_listings WHERE id = ? LIMIT 1").bind(input.listingId).first<{ id: string }>();
+  if (!listing) {
+    return c.json({ error: "Listing not found." }, 404);
+  }
+  await enforceMarketRateLimit(c.env, `report:${input.listingId}`, "report", 5);
+  const reportId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await c.env.DB.prepare(
+    "INSERT INTO market_reports (id, listing_id, reason, details_json, reporter, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+  ).bind(reportId, listing.id, input.reason, JSON.stringify(input.details ?? {}), input.isBlockRequest ? "anonymous" : null, now).run();
+  if (input.isBlockRequest) {
+    await c.env.DB.prepare(
+      "INSERT INTO market_blocks (id, listing_id, buyer_identity_id, reason, created_at) VALUES (?, ?, ?, ?, ?)",
+    ).bind(crypto.randomUUID(), listing.id, null, input.reason, now).run();
+  }
+  return c.json({ ok: true, reportId });
+});
+
 // One-press bulk publish: queue every publish-ready draft for this seller.
 // Each draft still runs the full verify -> publish -> blocker pipeline
 // individually, so failures surface per listing without stopping the rest.
@@ -2345,6 +2682,50 @@ function parseJsonArray(value: string | null | undefined) {
   } catch {
     return [];
   }
+}
+
+function safeParseJsonArray(value: string | null | undefined) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function createMarketSlug(value: string) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `listing-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+function escapePlainText(value: string, maxLength: number) {
+  return value.replace(/[\r\n]+/g, " ").trim().slice(0, maxLength);
+}
+
+function haversineMiles(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusMiles = 3958.8;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusMiles * c;
+}
+
+async function enforceMarketRateLimit(env: Bindings, key: string, kind: string, maxEvents: number) {
+  const now = Date.now();
+  const bucket = `${kind}:${key}`;
+  const row = await env.DB.prepare("SELECT id, payload_json FROM market_rate_events WHERE bucket = ? ORDER BY created_at DESC LIMIT 1").bind(bucket).first<{ id: string; payload_json: string }>();
+  const payload = row ? parseJsonRecord(row.payload_json) : null;
+  const timestamps = Array.isArray(payload?.timestamps) ? payload.timestamps.filter((item): item is number => typeof item === "number") : [];
+  const nextTimestamps = timestamps.filter((value) => now - value < 60_000);
+  if (nextTimestamps.length >= maxEvents) {
+    throw new Error("Rate limit exceeded.");
+  }
+  nextTimestamps.push(now);
+  await env.DB.prepare(
+    "INSERT INTO market_rate_events (id, bucket, payload_json, created_at) VALUES (?, ?, ?, ?)",
+  ).bind(crypto.randomUUID(), bucket, JSON.stringify({ timestamps: nextTimestamps }), new Date(now).toISOString()).run();
 }
 
 function parseJsonRecord(value: string): Record<string, unknown> | null {

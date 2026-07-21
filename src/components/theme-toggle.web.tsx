@@ -45,6 +45,8 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: "center",
     justifyContent: "center",
+    cursor: "pointer",
+    userSelect: "none",
   },
   glyphShell: {
     width: 44,

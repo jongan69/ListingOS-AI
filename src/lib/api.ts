@@ -10,10 +10,17 @@ import {
   BillingEventSchema,
   BillingSummarySchema,
   BillingSyncRequestSchema,
+  MarketFeedPageSchema,
+  MarketMessageSchema,
+  MarketReportRequestSchema,
+  MarketThreadSchema,
+  PublicMarketListingSchema,
   PricingStrategySchema,
   PublishRequestSchema,
   PublishResultSchema,
   PushTokenRegistrationSchema,
+  SessionEmailStartSchema,
+  SessionEmailVerifySchema,
   QueueItemSchema,
   SellerReadinessSchema,
   SessionStateSchema,
@@ -26,6 +33,10 @@ import {
   type BillingSummary,
   type BillingSyncRequestInput,
   type ListingMode,
+  type MarketFeedPage,
+  type MarketMessage,
+  type MarketReportRequest,
+  type MarketThread,
   type PricingStrategy,
   type PublishResult,
   type PushTokenRegistration,
@@ -159,6 +170,24 @@ export const api = {
   },
   getSessionMe(context: ApiContext) {
     return requestJson<SessionUser>(context, "/api/session/me", undefined, SessionUserSchema);
+  },
+  startEmailSession(context: ApiContext, email: string) {
+    return requestJson<{ ok: true; sessionToken: string; email: string }>(
+      context,
+      "/api/session/email/start",
+      { method: "POST", body: JSON.stringify(SessionEmailStartSchema.parse({ email })) },
+    );
+  },
+  verifyEmailSession(context: ApiContext, input: { email: string; sessionToken: string; verificationCode: string }) {
+    return requestJson<{ ok: true; user: SessionUser }>(
+      context,
+      "/api/session/email/verify",
+      { method: "POST", body: JSON.stringify(SessionEmailVerifySchema.parse(input)) },
+      { parse: (value) => value as { ok: true; user: SessionUser } },
+    );
+  },
+  logoutEmailSession(context: ApiContext) {
+    return requestJson<{ ok: true }>(context, "/api/session/logout", { method: "POST" });
   },
   registerPushToken(context: ApiContext, input: PushTokenRegistration) {
     return requestJson<{ ok: true }>(
@@ -340,6 +369,54 @@ export const api = {
   },
   getListingResult(context: ApiContext, draftId: string) {
     return requestJson<PublishResult>(context, `/api/listings/${draftId}`, undefined, PublishResultSchema);
+  },
+  publishMarketDraft(context: ApiContext, draftId: string, payload: { destination?: "listingos" | "ebay" | "both" }) {
+    return requestJson<{ ok: true; listingId: string; listingSlug: string; publicUrl: string; status: string }>(
+      context,
+      `/api/market/listings/${draftId}/publish`,
+      { method: "POST", body: JSON.stringify(payload) },
+    );
+  },
+  unpublishMarketListing(context: ApiContext, listingId: string) {
+    return requestJson<{ ok: true }>(context, `/api/market/listings/${encodeURIComponent(listingId)}/unpublish`, { method: "POST" });
+  },
+  markMarketListingSold(context: ApiContext, listingId: string) {
+    return requestJson<{ ok: true }>(context, `/api/market/listings/${encodeURIComponent(listingId)}/mark-sold`, { method: "POST" });
+  },
+  listMyMarketListings(context: ApiContext) {
+    return requestJson<{ items: unknown[] }>(context, "/api/market/listings/mine", undefined);
+  },
+  getPublicMarketFeed(context: ApiContext, query: Record<string, string | number | undefined>) {
+    const params = new URLSearchParams();
+    Object.entries(query).forEach(([key, value]) => {
+      if (typeof value === "number" || typeof value === "string") {
+        params.set(key, String(value));
+      }
+    });
+    return requestJson<MarketFeedPage>(
+      context,
+      `/api/public/market/listings${params.toString() ? `?${params.toString()}` : ""}`,
+      undefined,
+      MarketFeedPageSchema,
+    );
+  },
+  getPublicMarketListing(context: ApiContext, slug: string) {
+    return requestJson<MarketFeedPage["items"][number]>(context, `/api/public/market/listings/${encodeURIComponent(slug)}`, undefined, { parse: (value) => PublicMarketListingSchema.parse(value) });
+  },
+  startMarketInquiry(context: ApiContext, slug: string, input: { email: string; message: string }) {
+    return requestJson<{ ok: true; threadId: string; verified: boolean }>(context, `/api/public/market/listings/${encodeURIComponent(slug)}/inquiries`, { method: "POST", body: JSON.stringify(input) });
+  },
+  verifyMarketInquiry(context: ApiContext, inquiryId: string) {
+    return requestJson<{ ok: true; threadId: string }>(context, `/api/public/market/inquiries/verify?inquiryId=${encodeURIComponent(inquiryId)}`);
+  },
+  getMarketThread(context: ApiContext, threadId: string) {
+    return requestJson<MarketThread>(context, `/api/public/market/threads/${encodeURIComponent(threadId)}`, undefined, MarketThreadSchema);
+  },
+  sendMarketThreadMessage(context: ApiContext, threadId: string, input: { body: string }) {
+    return requestJson<MarketMessage>(context, `/api/public/market/threads/${encodeURIComponent(threadId)}/messages`, { method: "POST", body: JSON.stringify(MarketMessageSchema.parse(input)) }, MarketMessageSchema);
+  },
+  reportMarketListing(context: ApiContext, input: MarketReportRequest) {
+    return requestJson<{ ok: true; reportId: string }>(context, "/api/public/market/reports", { method: "POST", body: JSON.stringify(MarketReportRequestSchema.parse(input)) });
   },
 };
 

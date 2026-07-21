@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 
-import { appConfig } from "@/config/app";
+import { appConfig, type RevenueCatWebPurchaseLinks } from "@/config/app";
 import { revenueCatEntitlements } from "@/config/billing";
 import type { BillingSyncRequest } from "@/shared/contracts";
 
@@ -30,11 +30,48 @@ type RevenueCatState = {
   managementUrl: string | null;
   errorMessage: string | null;
   platformSupported: boolean;
+  webPurchaseLinks?: RevenueCatWebPurchaseLinks;
 };
 
 const nativeSupported = Platform.OS === "ios" || Platform.OS === "android";
+const webSupported = Platform.OS === "web";
 let configurePromise: Promise<RevenueCatState> | null = null;
 let currentAppUserId: string | null = null;
+
+function nativeUnavailableMessage(): string {
+  return "RevenueCat billing is available only in native iOS, Android, or configured web checkout links in this build.";
+}
+
+function hasRevenueCatWebLinks(): boolean {
+  return Object.values(appConfig.revenueCatWebPurchaseLinks).some(
+    (plan) => Boolean(plan?.monthly || plan?.annual),
+  );
+}
+
+function buildWebRevenueCatState(appUserId?: string | null): RevenueCatState {
+  if (!hasRevenueCatWebLinks()) {
+    return {
+      configured: false,
+      appUserId: appUserId ?? null,
+      packages: [],
+      activeEntitlements: [],
+      managementUrl: null,
+      errorMessage: "Web checkout links are not configured for RevenueCat. Set EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS.",
+      platformSupported: false,
+      webPurchaseLinks: {},
+    };
+  }
+  return {
+    configured: true,
+    appUserId: appUserId ?? null,
+    packages: [],
+    activeEntitlements: [],
+    managementUrl: null,
+    errorMessage: null,
+    platformSupported: true,
+    webPurchaseLinks: appConfig.revenueCatWebPurchaseLinks,
+  };
+}
 
 function resolveRevenueCatApiKey(): RevenueCatKeyContext {
   if (appConfig.revenueCatMode === "test") {
@@ -86,7 +123,20 @@ function isValidApiKeyPrefix(apiKey: string | null, expectedPrefix: string): api
 }
 
 export async function configureRevenueCat(appUserId?: string | null): Promise<RevenueCatState> {
-  if (!nativeSupported) return emptyState("RevenueCat purchases are native-only on this build.", false);
+  if (webSupported) {
+    currentAppUserId = appUserId ?? null;
+    const webState = buildWebRevenueCatState(appUserId);
+    const rawAppUserId = appUserId ? appUserId.replace(/^seller:/, "") : null;
+    const maskedAppUserId = rawAppUserId ? `seller:${rawAppUserId.slice(0, 4)}...` : "unset";
+    const webLinkCount = Object.values(appConfig.revenueCatWebPurchaseLinks).reduce(
+      (count, plan) => count + Number(Boolean(plan?.monthly)) + Number(Boolean(plan?.annual)),
+      0,
+    );
+    console.log(`[RevenueCat] mode=${appConfig.revenueCatMode} platform=web appUserId=${maskedAppUserId} webPurchaseLinks=${webLinkCount}`);
+    return webState;
+  }
+  if (!nativeSupported) return emptyState(nativeUnavailableMessage(), false);
+
   const resolvedKey = resolveRevenueCatApiKey();
   const apiKey = resolvedKey.apiKey;
   logRevenueCatDiagnostics(resolvedKey, appUserId);
@@ -113,9 +163,15 @@ export async function configureRevenueCat(appUserId?: string | null): Promise<Re
       true,
     );
   }
-  // Test Store keys are only valid in development builds. A production build
-  // must use the platform's appl_... key, even for an internal discount offer.
-  if (appConfig.revenueCatMode === "test" && !__DEV__) {
+  // Test Store keys are only valid in development builds. Internal/preview builds
+  // are release builds, so they must opt in explicitly via
+  // EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE_IN_RELEASE. A store production build
+  // must use the platform's appl_.../goog_... key.
+  if (
+    appConfig.revenueCatMode === "test"
+    && !__DEV__
+    && !appConfig.revenueCatAllowTestStoreInRelease
+  ) {
     return emptyState("RevenueCat Test Store mode is disabled outside development builds.", true);
   }
   if (!configurePromise) {
@@ -147,7 +203,8 @@ export async function configureRevenueCat(appUserId?: string | null): Promise<Re
 }
 
 export async function loadRevenueCatState(): Promise<RevenueCatState> {
-  if (!nativeSupported) return emptyState("RevenueCat purchases are native-only on this build.", false);
+  if (webSupported) return buildWebRevenueCatState(currentAppUserId);
+  if (!nativeSupported) return emptyState(nativeUnavailableMessage(), false);
   try {
     const { default: Purchases } = await import("react-native-purchases");
     const [customerInfo, offerings] = await Promise.all([
@@ -188,6 +245,13 @@ export async function loadRevenueCatState(): Promise<RevenueCatState> {
 }
 
 export async function purchaseRevenueCatPackage(pkg: PurchasesPackage) {
+  if (webSupported) {
+    return {
+      status: "failed" as const,
+      state: buildWebRevenueCatState(currentAppUserId),
+      errorMessage: nativeUnavailableMessage(),
+    };
+  }
   const { default: Purchases } = await import("react-native-purchases");
   try {
     await Purchases.purchasePackage(pkg as never);
@@ -205,6 +269,9 @@ export async function purchaseRevenueCatPackage(pkg: PurchasesPackage) {
 }
 
 export async function restoreRevenueCatPurchases() {
+  if (webSupported) {
+    return buildWebRevenueCatState(currentAppUserId);
+  }
   const { default: Purchases } = await import("react-native-purchases");
   console.log("[RevenueCat] restorePurchases.start");
   try {
@@ -221,6 +288,10 @@ export async function restoreRevenueCatPurchases() {
 }
 
 export async function signOutRevenueCat() {
+  if (webSupported) {
+    currentAppUserId = null;
+    return;
+  }
   if (!nativeSupported || !configurePromise) return;
   try {
     const { default: Purchases } = await import("react-native-purchases");
@@ -268,4 +339,4 @@ function emptyState(errorMessage: string | null, platformSupported: boolean): Re
   };
 }
 
-export type { PurchasesPackage, RevenueCatState };
+export type { PurchasesPackage, RevenueCatState, RevenueCatWebPurchaseLinks };
