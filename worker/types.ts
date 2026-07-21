@@ -30,6 +30,10 @@ export type Bindings = {
   EXPO_ACCESS_TOKEN?: string;
   REVENUECAT_SECRET_API_KEY?: string;
   REVENUECAT_WEBHOOK_AUTH_TOKEN?: string;
+  /** Which REST generation the secret key belongs to. Defaults to auto-detect. */
+  REVENUECAT_API_VERSION?: "v1" | "v2" | "auto";
+  /** Required for the v2 API, which scopes customers under a project. */
+  REVENUECAT_PROJECT_ID?: string;
   INTERNAL_ANALYTICS_TOKEN?: string;
   AI_UNKNOWN_MODEL_INPUT_USD_PER_MILLION?: string;
   AI_UNKNOWN_MODEL_CACHED_INPUT_USD_PER_MILLION?: string;

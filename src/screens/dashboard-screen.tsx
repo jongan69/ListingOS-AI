@@ -53,7 +53,9 @@ import {
 import { analyzePhotoSelection, type PhotoQualityReport } from "@/lib/photo-quality";
 import { clearWatchedPublishedDraft, isWatchedPublishedDraft } from "@/lib/publish-watch";
 import {
+  addRevenueCatCustomerInfoListener,
   configureRevenueCat,
+  loadRevenueCatState,
   purchaseRevenueCatPackage,
   restoreRevenueCatPurchases,
   revenueCatStateToSyncRequest,
@@ -259,11 +261,32 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
     if (!sessionToken || !meQuery.data) return;
     const appUserId = `seller:${meQuery.data.sellerAccountId}`;
     let canceled = false;
+    let unsubscribe: (() => void) | null = null;
     void configureRevenueCat(appUserId).then(async (state) => {
       if (canceled) return;
       setRevenueCatState(state);
       const synced = await api.syncBilling(apiContext, revenueCatStateToSyncRequest(state, appUserId));
       queryClient.setQueryData(["billing", apiBaseUrl, sessionToken], synced);
+
+      // Keep the UI honest for entitlement changes that happen outside the
+      // purchase button: renewals, restores, another device, or a webhook
+      // landing after we already synced.
+      unsubscribe = await addRevenueCatCustomerInfoListener(async (nextState) => {
+        if (canceled) return;
+        setRevenueCatState(nextState);
+        try {
+          const resynced = await api.syncBilling(
+            apiContext,
+            revenueCatStateToSyncRequest(nextState, appUserId),
+          );
+          if (canceled) return;
+          queryClient.setQueryData(["billing", apiBaseUrl, sessionToken], resynced);
+        } catch {
+          // A failed background resync should not surface an error to the
+          // seller; the next foreground refresh will reconcile.
+        }
+      });
+      if (canceled) unsubscribe?.();
     }).catch((error) => {
       if (canceled) return;
       setRevenueCatState({
@@ -278,6 +301,7 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
     });
     return () => {
       canceled = true;
+      unsubscribe?.();
     };
   }, [apiBaseUrl, apiContext, meQuery.data, queryClient, sessionToken]);
 
@@ -459,14 +483,40 @@ export function DashboardScreen({ footer }: { footer?: ReactNode }) {
         return;
       }
       const fallbackAppUserId = meQuery.data ? `seller:${meQuery.data.sellerAccountId}` : "seller:unknown";
-      const synced = await api.syncBilling(apiContext, revenueCatStateToSyncRequest(outcome.state, fallbackAppUserId));
+      // The Worker verifies entitlements against RevenueCat's REST API, which
+      // can still report the old state for a moment after the SDK confirms the
+      // purchase. Syncing once and writing that straight into the cache is what
+      // leaves the UI showing "Free" after a successful upgrade. Retry until
+      // the server agrees with the entitlement the SDK just granted.
+      const expectedEntitlements = outcome.state.activeEntitlements;
+      let synced = await api.syncBilling(apiContext, revenueCatStateToSyncRequest(outcome.state, fallbackAppUserId));
+      for (let attempt = 0; attempt < 4 && synced.plan === "free" && expectedEntitlements.length > 0; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
+        synced = await api.syncBilling(
+          apiContext,
+          revenueCatStateToSyncRequest(await loadRevenueCatState(), fallbackAppUserId),
+        );
+      }
       queryClient.setQueryData(["billing", apiBaseUrl, sessionToken], synced);
+      // Also invalidate so anything else reading billing refetches, and so a
+      // late webhook is picked up rather than pinned by staleTime.
+      await queryClient.invalidateQueries({ queryKey: ["billing", apiBaseUrl, sessionToken] });
       await api.recordBillingEvent(apiContext, { eventName: "purchase_completed", packageId: pkg.identifier, plan: synced.plan });
-      showToast({
-        title: "Plan upgraded",
-        message: `${synced.usage.remainingCredits} AI listings are available this month.`,
-        tone: "success",
-      });
+      if (synced.plan === "free" && expectedEntitlements.length > 0) {
+        // Purchase succeeded on the store but the server has not confirmed it.
+        // Say so plainly instead of claiming an upgrade that did not land.
+        showToast({
+          title: "Purchase received",
+          message: "Confirming with our servers. Your plan will update shortly — pull to refresh if it doesn't.",
+          tone: "info",
+        });
+      } else {
+        showToast({
+          title: "Plan upgraded",
+          message: `${synced.usage.remainingCredits} AI listings are available this month.`,
+          tone: "success",
+        });
+      }
       setPaywallOpen(false);
     },
     onError: async (error) => {

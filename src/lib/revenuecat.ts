@@ -268,6 +268,35 @@ export async function purchaseRevenueCatPackage(pkg: PurchasesPackage) {
   }
 }
 
+/**
+ * Fires whenever RevenueCat's CustomerInfo changes — purchases, renewals,
+ * restores, expirations, changes made on another device, and webhook-driven
+ * updates. Without this the UI only refreshes on the one code path that
+ * happens to call sync, so a renewal or a late server confirmation never
+ * reaches the screen. Returns an unsubscribe function.
+ */
+export async function addRevenueCatCustomerInfoListener(
+  onChange: (state: RevenueCatState) => void,
+): Promise<() => void> {
+  if (!nativeSupported || !configurePromise) return () => undefined;
+  try {
+    const { default: Purchases } = await import("react-native-purchases");
+    const handler = () => {
+      void loadRevenueCatState().then(onChange).catch(() => undefined);
+    };
+    Purchases.addCustomerInfoUpdateListener(handler);
+    return () => {
+      try {
+        Purchases.removeCustomerInfoUpdateListener(handler);
+      } catch {
+        // Listener teardown is best-effort; never let it throw during unmount.
+      }
+    };
+  } catch {
+    return () => undefined;
+  }
+}
+
 export async function restoreRevenueCatPurchases() {
   if (webSupported) {
     return buildWebRevenueCatState(currentAppUserId);

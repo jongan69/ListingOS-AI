@@ -73,6 +73,12 @@ const EBAY_SELLER_REQUEST_TIMEOUT_MS = 15_000;
 const EBAY_MEDIA_INGEST_TIMEOUT_MS = 12_000;
 const EXTERNAL_MARKET_LOOKUP_TIMEOUT_MS = 5_000;
 const REVENUECAT_REST_TIMEOUT_MS = 5_000;
+/**
+ * The entitlement identifiers this app understands. v1 keys these by object
+ * name, v2 by `lookup_key` — both resolve to these same strings, so the two
+ * code paths stay in agreement by sharing this list.
+ */
+const KNOWN_ENTITLEMENTS = ["starter", "pro", "studio"];
 const STALE_PUBLISH_ATTEMPT_MS = 2 * 60_000;
 const DRAFT_IMAGE_LIMIT = 6;
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
@@ -2312,16 +2318,16 @@ async function resolveClientBillingSync(
 
   if (secretApiKey) {
     try {
-      const subscriber = await fetchRevenueCatSubscriber(appUserId, secretApiKey);
-      const activeEntitlements = activeSubscriberEntitlements(subscriber);
+      const lookup = await lookupRevenueCatEntitlements(env, appUserId, secretApiKey);
+      const activeEntitlements = lookup.activeEntitlements;
       return {
         ...body,
         appUserId,
         source: "revenuecat_rest",
         activeEntitlements,
         subscriptionStatus: activeEntitlements.length > 0 ? "active" : "free",
-        managementUrl: subscriberManagementUrl(subscriber) ?? body.managementUrl ?? null,
-        customerInfo: subscriber,
+        managementUrl: lookup.managementUrl ?? body.managementUrl ?? null,
+        customerInfo: { apiVersion: lookup.apiVersion, payload: lookup.raw },
       };
     } catch (error) {
       if (enforcementMode === "observe") {
@@ -2331,13 +2337,27 @@ async function resolveClientBillingSync(
       if (existing && isTrustedBillingSource(existing.source)) {
         return trustedExistingBillingSync(body, appUserId, existing, "revenuecat_rest_failed");
       }
-      console.error("RevenueCat REST sync failed; falling back to free in enforce mode", error);
+      console.error(
+        `[billing] RevenueCat REST lookup failed for appUserId=${appUserId}. ` +
+          "In enforce mode this downgrades the seller to free even though the store charged them. " +
+          `error=${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   if (enforcementMode === "enforce") {
     if (existing && isTrustedBillingSource(existing.source)) {
       return trustedExistingBillingSync(body, appUserId, existing, "missing_revenuecat_secret");
+    }
+    // This is the silent downgrade: the client reported a valid entitlement but
+    // the server could not verify it, so the seller is billed by the store and
+    // still shown the free plan. Log loudly — it is otherwise invisible.
+    if ((body.activeEntitlements ?? []).length > 0) {
+      console.error(
+        "[billing] Downgrading a client-reported entitlement to free because server verification did not succeed. " +
+          `appUserId=${appUserId} clientEntitlements=${JSON.stringify(body.activeEntitlements)} ` +
+          `secretConfigured=${Boolean(env.REVENUECAT_SECRET_API_KEY?.trim())} existingSource=${existing?.source ?? "none"}`,
+      );
     }
     return {
       ...body,
@@ -2624,7 +2644,34 @@ function entitlementPlan(activeEntitlements: string[]): BillingPlan {
   return "free";
 }
 
-async function fetchRevenueCatSubscriber(appUserId: string, secretApiKey: string) {
+/**
+ * RevenueCat secret keys come in two generations, both prefixed `sk_`. The
+ * generation is only visible in the dashboard's "API Version" column, and a key
+ * of one generation returns 403 against the other generation's endpoints. So we
+ * cannot tell them apart by inspection — we detect by trying, and remember.
+ *
+ * REVENUECAT_API_VERSION pins this explicitly ("v1" | "v2"); "auto" (default)
+ * tries v1 then v2. Set it once you know which key you hold to avoid the extra
+ * request on the failing path.
+ */
+type RevenueCatApiVersion = "v1" | "v2";
+
+type RevenueCatEntitlementLookup = {
+  activeEntitlements: string[];
+  managementUrl: string | null;
+  raw: unknown;
+  apiVersion: RevenueCatApiVersion;
+};
+
+function revenueCatAuthError(status: number, version: RevenueCatApiVersion) {
+  const other = version === "v1" ? "V2" : "V1";
+  return status === 401 || status === 403
+    ? ` — key rejected by the ${version} API; it is probably a ${other} key `
+      + `(see the "API Version" column on RevenueCat's API keys page)`
+    : "";
+}
+
+async function fetchRevenueCatSubscriberV1(appUserId: string, secretApiKey: string) {
   const response = await fetch(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(appUserId)}`, {
     headers: {
       Authorization: `Bearer ${secretApiKey}`,
@@ -2633,9 +2680,110 @@ async function fetchRevenueCatSubscriber(appUserId: string, secretApiKey: string
     signal: AbortSignal.timeout(REVENUECAT_REST_TIMEOUT_MS),
   });
   if (!response.ok) {
-    throw new Error(`RevenueCat subscriber lookup failed with ${response.status}`);
+    throw new Error(
+      `RevenueCat v1 subscriber lookup failed with ${response.status}${revenueCatAuthError(response.status, "v1")}`,
+    );
   }
   return response.json() as Promise<Record<string, unknown>>;
+}
+
+/**
+ * v2 exposes active entitlements as their own collection. Entries carry both an
+ * opaque `entitlement_id` and the human `lookup_key` — the latter is what maps
+ * to our starter/pro/studio contract, so match on that.
+ */
+async function fetchRevenueCatActiveEntitlementsV2(
+  projectId: string,
+  appUserId: string,
+  secretApiKey: string,
+) {
+  const url = `https://api.revenuecat.com/v2/projects/${encodeURIComponent(projectId)}`
+    + `/customers/${encodeURIComponent(appUserId)}/active_entitlements`;
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${secretApiKey}`,
+      Accept: "application/json",
+    },
+    signal: AbortSignal.timeout(REVENUECAT_REST_TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `RevenueCat v2 active_entitlements lookup failed with ${response.status}`
+        + `${revenueCatAuthError(response.status, "v2")}`,
+    );
+  }
+  return response.json() as Promise<Record<string, unknown>>;
+}
+
+function activeEntitlementsFromV2(payload: Record<string, unknown>) {
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  const now = Date.now();
+  return items
+    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+    .filter((item) => {
+      const lookupKey = item.lookup_key;
+      if (typeof lookupKey !== "string" || !KNOWN_ENTITLEMENTS.includes(lookupKey)) return false;
+      // A null/absent expiry means a lifetime or non-expiring grant.
+      const expiresAt = item.expires_at;
+      if (expiresAt === null || typeof expiresAt === "undefined") return true;
+      // v2 reports epoch milliseconds; tolerate an ISO string defensively.
+      const expiry = typeof expiresAt === "number" ? expiresAt : Date.parse(String(expiresAt));
+      return Number.isFinite(expiry) && expiry > now;
+    })
+    .map((item) => item.lookup_key as string);
+}
+
+async function lookupRevenueCatEntitlements(
+  env: Bindings,
+  appUserId: string,
+  secretApiKey: string,
+): Promise<RevenueCatEntitlementLookup> {
+  const configured = env.REVENUECAT_API_VERSION?.trim().toLowerCase();
+  const projectId = env.REVENUECAT_PROJECT_ID?.trim();
+
+  const runV1 = async (): Promise<RevenueCatEntitlementLookup> => {
+    const subscriber = await fetchRevenueCatSubscriberV1(appUserId, secretApiKey);
+    return {
+      activeEntitlements: activeSubscriberEntitlements(subscriber),
+      managementUrl: subscriberManagementUrl(subscriber),
+      raw: subscriber,
+      apiVersion: "v1",
+    };
+  };
+
+  const runV2 = async (): Promise<RevenueCatEntitlementLookup> => {
+    if (!projectId) {
+      throw new Error("REVENUECAT_PROJECT_ID is required to use the RevenueCat v2 API");
+    }
+    const payload = await fetchRevenueCatActiveEntitlementsV2(projectId, appUserId, secretApiKey);
+    return {
+      // v2's active_entitlements collection carries no management URL; the
+      // client-supplied one is used instead by the caller.
+      activeEntitlements: activeEntitlementsFromV2(payload),
+      managementUrl: null,
+      raw: payload,
+      apiVersion: "v2",
+    };
+  };
+
+  if (configured === "v1") return runV1();
+  if (configured === "v2") return runV2();
+
+  // Auto: try v1, and only fall through to v2 when the failure looks like the
+  // key being the wrong generation. Any other error is a real failure and must
+  // not be masked by a second request.
+  try {
+    return await runV1();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const looksLikeWrongKeyGeneration = message.includes("401") || message.includes("403");
+    if (!looksLikeWrongKeyGeneration || !projectId) throw error;
+    console.warn(
+      "[billing] RevenueCat v1 rejected the secret key; retrying against v2. "
+        + "Set REVENUECAT_API_VERSION=v2 to skip this retry.",
+    );
+    return runV2();
+  }
 }
 
 function activeSubscriberEntitlements(response: Record<string, unknown>) {
@@ -2648,7 +2796,7 @@ function activeSubscriberEntitlements(response: Record<string, unknown>) {
   const now = Date.now();
   return Object.entries(entitlements)
     .filter(([id, entitlement]) => {
-      if (!["starter", "pro", "studio"].includes(id)) return false;
+      if (!KNOWN_ENTITLEMENTS.includes(id)) return false;
       if (typeof entitlement !== "object" || !entitlement) return false;
       const expiresDate = (entitlement as { expires_date?: unknown }).expires_date;
       if (expiresDate === null || typeof expiresDate === "undefined") return true;

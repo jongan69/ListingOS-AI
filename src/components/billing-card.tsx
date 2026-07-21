@@ -126,11 +126,16 @@ export function PaywallPanel({
           const canOpenCheckout = isWeb;
           const monthlyCheckoutLink = getWebCheckoutLink(plan, "monthly", revenueCat?.webPurchaseLinks);
           const annualCheckoutLink = getWebCheckoutLink(plan, "annual", revenueCat?.webPurchaseLinks);
+          // A seller must not be able to buy the plan they already hold. The
+          // store would take a second payment for the same entitlement.
+          const isCurrentPlan = billing?.plan === plan;
           return (
-            <View key={plan} style={[styles.planCard, billing?.plan === plan ? styles.planCardActive : null]}>
+            <View key={plan} style={[styles.planCard, isCurrentPlan ? styles.planCardActive : null]}>
               <View style={styles.planTop}>
                 <Text selectable style={styles.planTitle}>{info.title}</Text>
-                <Text selectable style={styles.planPrice}>{info.monthlyPrice}</Text>
+                <Text selectable style={styles.planPrice}>
+                  {isCurrentPlan ? "Current plan" : info.monthlyPrice}
+                </Text>
               </View>
               <Text selectable style={styles.planDescription}>{info.description}</Text>
               {info.benefits.map((benefit) => (
@@ -138,10 +143,10 @@ export function PaywallPanel({
               ))}
               <View style={styles.planActions}>
                   <PlanButton
-                  disabled={canOpenCheckout
+                  disabled={isCurrentPlan || (canOpenCheckout
                     ? !monthlyCheckoutLink
-                    : !nativeReady || !monthlyPackage}
-                  label={info.monthlyPrice}
+                    : !nativeReady || !monthlyPackage)}
+                  label={isCurrentPlan ? "Active" : info.monthlyPrice}
                   loading={purchasingPackageId === monthlyPackage?.identifier}
                   onPress={() => {
                     if (canOpenCheckout && monthlyCheckoutLink) {
@@ -154,10 +159,10 @@ export function PaywallPanel({
                   }}
                 />
                 <PlanButton
-                  disabled={canOpenCheckout
+                  disabled={isCurrentPlan || (canOpenCheckout
                     ? !annualCheckoutLink
-                    : !nativeReady || !annualPackage}
-                  label={info.annualPrice}
+                    : !nativeReady || !annualPackage)}
+                  label={isCurrentPlan ? "Active" : info.annualPrice}
                   loading={purchasingPackageId === annualPackage?.identifier}
                   onPress={() => {
                     if (canOpenCheckout && annualCheckoutLink) {

@@ -7,6 +7,10 @@
     "EBAY_MARKETPLACE_ID": "EBAY_US",
     "EBAY_USE_SANDBOX": "false",
     "BILLING_ENFORCEMENT_MODE": "enforce",
+    // Project ID from the RevenueCat dashboard URL. Required by the v2 API.
+    "REVENUECAT_PROJECT_ID": "89a32260",
+    // "v1" | "v2" | "auto". Auto tries v1 then falls back to v2 on 401/403.
+    "REVENUECAT_API_VERSION": "auto",
     "PUBLIC_API_BASE_URL": "https://seller-ai-platform.jonathang132298.workers.dev",
     "PUBLIC_WEB_APP_URL": "https://listingos.expo.app"
   },

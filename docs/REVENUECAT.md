@@ -49,6 +49,37 @@ Public SDK keys are safe in client code. The secret key is not.
 | `EXPO_PUBLIC_REVENUECAT_WEB_PURCHASE_LINKS` | JSON map of hosted checkout URLs. Empty until Stripe is connected. |
 | `REVENUECAT_SECRET_API_KEY` | Worker secret. REST entitlement verification. |
 | `REVENUECAT_WEBHOOK_AUTH_TOKEN` | Worker secret. Validates inbound webhooks. |
+| `REVENUECAT_API_VERSION` | `v1` \| `v2` \| `auto` (default). Which REST generation the secret key belongs to. |
+| `REVENUECAT_PROJECT_ID` | `89a32260`. Required by the v2 API, which scopes customers under a project. |
+
+### Secret key generations — the 403 trap
+
+Secret keys are **all prefixed `sk_`**, but they come in two generations, and a
+key of one generation returns **403 against the other generation's endpoints**.
+The only place the generation is visible is the **"API Version" column** on the
+API keys page.
+
+This cost real debugging time on 2026-07-21: a V2 key was in use against the v1
+`/v1/subscribers` endpoint, so every verification returned 403. In `enforce`
+mode that silently downgraded paying sellers to `free` — the store charged them
+and the app showed no entitlement.
+
+`lookupRevenueCatEntitlements` in `worker/index.ts` now supports both:
+
+- **v1** — `GET /v1/subscribers/{app_user_id}`, entitlements keyed by object name.
+- **v2** — `GET /v2/projects/{project_id}/customers/{app_user_id}/active_entitlements`,
+  matched on each item's `lookup_key`.
+
+Both resolve to the same `starter` / `pro` / `studio` strings via the shared
+`KNOWN_ENTITLEMENTS` list, so the two paths cannot drift.
+
+With `auto`, v1 is tried first and v2 is used only when v1 fails with 401/403 —
+any other error is a genuine failure and is not masked by a second request. Once
+you know which key you hold, pin `REVENUECAT_API_VERSION` to skip the retry.
+
+**Migrating to v2:** set `REVENUECAT_API_VERSION=v2` and store a V2 secret key.
+No other change. Note the v2 `active_entitlements` collection carries no
+management URL, so the client-supplied one is used instead.
 
 ---
 
