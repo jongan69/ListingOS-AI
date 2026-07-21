@@ -137,7 +137,53 @@ and gates.
 
 ---
 
-## 4. Other Planned Work
+## 4. Seller Copilot Companion
+
+ListingOS and Seller Copilot could work together as optional companion products while
+remaining independently useful. This would not merge the products or make either one a
+prerequisite for the other.
+
+The product boundary would stay explicit:
+
+- **ListingOS** would own mobile capture, listing intelligence, seller review, and initial
+  publication.
+- **Seller Copilot** would own desktop store operations after publication, including
+  optimization, orders, messages, fulfillment, and other ongoing management.
+
+### First experiment
+
+The first integration would be a narrow handoff rather than shared infrastructure:
+
+- Seller Copilot would offer a **Create with ListingOS** action that displays a QR code
+  and mobile deep link into the ListingOS capture flow.
+- The handoff would carry only non-sensitive launch context, such as marketplace and an
+  attribution source. It would never carry marketplace credentials or session tokens.
+- Listings published by ListingOS would use stable SKU attribution that Seller Copilot
+  could recognize.
+- Seller Copilot would discover the resulting listing through its normal eBay
+  reconciliation and label it as created with ListingOS before taking over post-publish
+  operations.
+
+The experiment would not introduce shared OAuth tokens, a shared database, cross-product
+draft synchronization, or bundled subscriptions. Those choices would couple two products
+with deliberately different storage and trust boundaries before user value is proven.
+
+### Validation gate
+
+Test the handoff with at least five varied products on the same connected eBay account.
+The experiment would need to show that the deep link opens the correct capture state,
+canceling creates no desktop state, each approved publish produces exactly one listing,
+Seller Copilot reconciliation finds it without duplicates, attribution survives repeated
+syncs and restarts, and unrelated listings remain unchanged.
+
+Richer account linking or signed cross-product events would be considered only after
+observed sellers repeatedly move from ListingOS capture into Seller Copilot management and
+the attribution materially improves that workflow. Otherwise, the QR/deep-link handoff
+would remain the complete integration.
+
+---
+
+## 5. Other Planned Work
 
 - Sold-comps pricing and true time-to-sale calibration. Pricing today uses **active**
   comparables only.

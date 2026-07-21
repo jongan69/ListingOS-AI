@@ -102,6 +102,7 @@ export function DraftDetailScreen() {
   const [showEditor, setShowEditor] = useState(false);
   const [showSpecifics, setShowSpecifics] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
+  const [showMoreActions, setShowMoreActions] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [remixNotice, setRemixNotice] = useState<string | null>(null);
   const lastSavedSignatureRef = useRef("");
@@ -591,55 +592,22 @@ export function DraftDetailScreen() {
 
   const footer = isProofMode ? (
     <AppButton label="Proof replay • no live changes" onPress={() => {}} disabled />
+  ) : publishedUrl ? (
+    <AppButton
+      label="View live listing"
+      accessibilityHint="Opens this listing on eBay"
+      onPress={() => Linking.openURL(publishedUrl)}
+    />
+  ) : draft?.status === "published" ? (
+    <AppButton label="Listing published" onPress={() => {}} disabled />
   ) : (
-    <View style={styles.footerStack}>
-      <AppButton
-        label="Copy listing text"
-        accessibilityHint="Copies this listing as Markdown you can paste into any marketplace"
-        onPress={copyListing}
-        tone="secondary"
-        disabled={!draft}
-      />
-      <AppButton
-        label="Share listing text"
-        accessibilityHint="Opens the share sheet with this listing as Markdown"
-        onPress={shareListing}
-        tone="secondary"
-        disabled={!draft}
-      />
-      {marketPublishUrl ? (
-        <AppButton
-          label="Open ListingOS listing"
-          accessibilityHint="Opens the public ListingOS marketplace listing"
-          onPress={() => Linking.openURL(marketPublishUrl)}
-        />
-      ) : (
-        <AppButton
-          label={marketPublishMutation.isPending ? "Publishing to ListingOS..." : "Publish to ListingOS beta"}
-          accessibilityHint="Publishes this draft to the ListingOS marketplace"
-          onPress={() => marketPublishMutation.mutate()}
-          loading={marketPublishMutation.isPending}
-          tone="secondary"
-        />
-      )}
-      {publishedUrl ? (
-        <AppButton
-          label="View live listing"
-          accessibilityHint="Opens this listing on eBay"
-          onPress={() => Linking.openURL(publishedUrl)}
-        />
-      ) : draft?.status === "published" ? (
-        <AppButton label="Listing published" onPress={() => {}} disabled />
-      ) : (
-        <AppButton
-          label={publishing ? "Publishing to eBay..." : publishLabel}
-          accessibilityHint="Saves, verifies, and publishes this listing to eBay"
-          onPress={() => publishMutation.mutate()}
-          loading={publishing}
-          disabled={!canPublish}
-        />
-      )}
-    </View>
+    <AppButton
+      label={publishing ? "Publishing to eBay..." : publishLabel}
+      accessibilityHint="Saves, verifies, and publishes this listing to eBay"
+      onPress={() => publishMutation.mutate()}
+      loading={publishing}
+      disabled={!canPublish}
+    />
   );
 
   async function refreshDraft() {
@@ -1137,6 +1105,55 @@ export function DraftDetailScreen() {
               ) : null}
             </SurfaceCard>
 
+            {!isProofMode ? (
+              <SurfaceCard
+                eyebrow="More actions"
+                title="Export or publish elsewhere"
+                subtitle="Keep the eBay review path focused. Open these tools only when you need a portable copy or the experimental ListingOS Market destination."
+              >
+                <DisclosureRow
+                  title="Copy, share, or use Market beta"
+                  meta="3 options"
+                  expanded={showMoreActions}
+                  onPress={() => setShowMoreActions((current) => !current)}
+                />
+                {showMoreActions ? (
+                  <View style={styles.moreActionsStack}>
+                    <AppButton
+                      label="Copy listing text"
+                      accessibilityHint="Copies this listing as Markdown you can paste into any marketplace"
+                      onPress={copyListing}
+                      tone="secondary"
+                      disabled={!draft}
+                    />
+                    <AppButton
+                      label="Share listing text"
+                      accessibilityHint="Opens the share sheet with this listing as Markdown"
+                      onPress={shareListing}
+                      tone="secondary"
+                      disabled={!draft}
+                    />
+                    {marketPublishUrl ? (
+                      <AppButton
+                        label="Open ListingOS Market listing"
+                        accessibilityHint="Opens the public ListingOS marketplace listing"
+                        onPress={() => Linking.openURL(marketPublishUrl)}
+                        tone="secondary"
+                      />
+                    ) : (
+                      <AppButton
+                        label={marketPublishMutation.isPending ? "Publishing to ListingOS..." : "Publish to ListingOS Market beta"}
+                        accessibilityHint="Publishes this draft to the experimental ListingOS marketplace"
+                        onPress={() => marketPublishMutation.mutate()}
+                        loading={marketPublishMutation.isPending}
+                        tone="secondary"
+                      />
+                    )}
+                  </View>
+                ) : null}
+              </SurfaceCard>
+            ) : null}
+
             <ComparableRemixSection
               comparables={draft.comparables}
               onOpenComparable={(url) => Linking.openURL(url)}
@@ -1276,6 +1293,7 @@ function PricingTrustCard({
 }) {
   const palette = usePalette();
   const styles = useMemo(() => createStyles(palette), [palette]);
+  const [showDetails, setShowDetails] = useState(false);
   const evidence = draft.pricingEvidence;
   const confidence = evidence ? Math.round(evidence.confidence * 100) : 0;
   const sourceLabel = evidence ? pricingEvidenceSourceLabel(evidence.source) : "Marketplace evidence";
@@ -1302,35 +1320,45 @@ function PricingTrustCard({
         <InfoPanel label="Accepted" value={`${evidence?.exactMatchCount ?? acceptedComparables.length}`} />
         <InfoPanel label="Rejected" value={`${evidence?.rejectedCount ?? rejectedComparables.length}`} />
       </View>
-      {evidence?.notes?.length ? (
-        <View style={styles.pricingTrustNoteStack}>
-          {evidence.notes.slice(0, 3).map((note) => (
-            <Text key={note} selectable style={styles.evidenceNote}>- {note}</Text>
-          ))}
-        </View>
+      <DisclosureRow
+        title="Pricing evidence details"
+        meta={`${acceptedComparables.length + rejectedComparables.length} comps`}
+        expanded={showDetails}
+        onPress={() => setShowDetails((current) => !current)}
+      />
+      {showDetails ? (
+        <>
+          {evidence?.notes?.length ? (
+            <View style={styles.pricingTrustNoteStack}>
+              {evidence.notes.slice(0, 3).map((note) => (
+                <Text key={note} selectable style={styles.evidenceNote}>- {note}</Text>
+              ))}
+            </View>
+          ) : null}
+          <View style={styles.pricingTrustLists}>
+            <View style={[styles.pricingTrustColumn, styles.pricingTrustAcceptedColumn]}>
+              <Text selectable style={styles.pricingTrustAcceptedTitle}>✓ Accepted for pricing</Text>
+              {acceptedComparables.length > 0 ? acceptedComparables.map((comparable, index) => (
+                <View key={`${comparable.title}-${index}`} style={styles.pricingTrustComp}>
+                  <Text selectable style={styles.compTitle}>{comparable.title}</Text>
+                  <Text selectable style={styles.compMeta}>
+                    {comparable.totalPrice ? `$${comparable.totalPrice.toFixed(2)}` : "No price"} · {comparableSourceLabel(comparable.source)}
+                  </Text>
+                </View>
+              )) : <Text selectable style={styles.helperText}>No trusted comps were accepted.</Text>}
+            </View>
+            <View style={[styles.pricingTrustColumn, styles.pricingTrustRejectedColumn]}>
+              <Text selectable style={styles.pricingTrustRejectedTitle}>× Rejected from pricing</Text>
+              {rejectedComparables.length > 0 ? rejectedComparables.map((comparable, index) => (
+                <View key={`${comparable.title}-${index}`} style={styles.pricingTrustComp}>
+                  <Text selectable style={styles.compTitle}>{comparable.title}</Text>
+                  <Text selectable style={styles.rejectedCompText}>{comparable.rejectionReason ?? "Rejected by ListingOS pricing filters."}</Text>
+                </View>
+              )) : <Text selectable style={styles.helperText}>No rejected comps to show for this draft.</Text>}
+            </View>
+          </View>
+        </>
       ) : null}
-      <View style={styles.pricingTrustLists}>
-        <View style={[styles.pricingTrustColumn, styles.pricingTrustAcceptedColumn]}>
-          <Text selectable style={styles.pricingTrustAcceptedTitle}>✓ Accepted for pricing</Text>
-          {acceptedComparables.length > 0 ? acceptedComparables.map((comparable, index) => (
-            <View key={`${comparable.title}-${index}`} style={styles.pricingTrustComp}>
-              <Text selectable style={styles.compTitle}>{comparable.title}</Text>
-              <Text selectable style={styles.compMeta}>
-                {comparable.totalPrice ? `$${comparable.totalPrice.toFixed(2)}` : "No price"} · {comparableSourceLabel(comparable.source)}
-              </Text>
-            </View>
-          )) : <Text selectable style={styles.helperText}>No trusted comps were accepted.</Text>}
-        </View>
-        <View style={[styles.pricingTrustColumn, styles.pricingTrustRejectedColumn]}>
-          <Text selectable style={styles.pricingTrustRejectedTitle}>× Rejected from pricing</Text>
-          {rejectedComparables.length > 0 ? rejectedComparables.map((comparable, index) => (
-            <View key={`${comparable.title}-${index}`} style={styles.pricingTrustComp}>
-              <Text selectable style={styles.compTitle}>{comparable.title}</Text>
-              <Text selectable style={styles.rejectedCompText}>{comparable.rejectionReason ?? "Rejected by ListingOS pricing filters."}</Text>
-            </View>
-          )) : <Text selectable style={styles.helperText}>No rejected comps to show for this draft.</Text>}
-        </View>
-      </View>
     </SurfaceCard>
   );
 }
@@ -1344,6 +1372,7 @@ function OpportunityAuditCard({ audit }: { audit: ListingOpportunityAudit }) {
       : "Improve next";
   const palette = usePalette();
   const styles = useMemo(() => createStyles(palette), [palette]);
+  const [showDetails, setShowDetails] = useState(false);
 
   return (
     <SurfaceCard
@@ -1355,25 +1384,35 @@ function OpportunityAuditCard({ audit }: { audit: ListingOpportunityAudit }) {
         <StatusPill label={priorityLabel} tone={tone} />
         <Text selectable style={styles.helperText}>Scores weigh search, media, content, trust, offer quality, and margin risk.</Text>
       </View>
-      <View style={styles.scoreGrid}>
-        {Object.entries(audit.scores).map(([label, value]) => (
-          <View key={label} style={styles.scoreTile}>
-            <Text selectable style={styles.scoreValue}>{value}</Text>
-            <Text selectable style={styles.scoreLabel}>{label}</Text>
-            <View style={styles.scoreTrack}>
-              <View style={[styles.scoreFill, { width: `${value}%` }]} />
-            </View>
+      <DisclosureRow
+        title="Listing-strength breakdown"
+        meta={`${Object.keys(audit.scores).length} signals`}
+        expanded={showDetails}
+        onPress={() => setShowDetails((current) => !current)}
+      />
+      {showDetails ? (
+        <>
+          <View style={styles.scoreGrid}>
+            {Object.entries(audit.scores).map(([label, value]) => (
+              <View key={label} style={styles.scoreTile}>
+                <Text selectable style={styles.scoreValue}>{value}</Text>
+                <Text selectable style={styles.scoreLabel}>{label}</Text>
+                <View style={styles.scoreTrack}>
+                  <View style={[styles.scoreFill, { width: `${value}%` }]} />
+                </View>
+              </View>
+            ))}
           </View>
-        ))}
-      </View>
-      <View style={styles.auditEvidenceStack}>
-        {audit.evidence.slice(0, 4).map((item) => (
-          <Text key={item} selectable style={styles.evidenceNote}>- {item}</Text>
-        ))}
-        {audit.limitations.slice(0, 2).map((item) => (
-          <Text key={item} selectable style={styles.auditLimitation}>- {item}</Text>
-        ))}
-      </View>
+          <View style={styles.auditEvidenceStack}>
+            {audit.evidence.slice(0, 4).map((item) => (
+              <Text key={item} selectable style={styles.evidenceNote}>- {item}</Text>
+            ))}
+            {audit.limitations.slice(0, 2).map((item) => (
+              <Text key={item} selectable style={styles.auditLimitation}>- {item}</Text>
+            ))}
+          </View>
+        </>
+      ) : null}
     </SurfaceCard>
   );
 }
@@ -1391,6 +1430,7 @@ function ComparableRemixSection({
 }) {
   const palette = usePalette();
   const styles = useMemo(() => createStyles(palette), [palette]);
+  const [showComparables, setShowComparables] = useState(false);
   const sortedComparables = sortComparablesForRemix(comparables).slice(0, 8);
   const usableCount = sortedComparables.filter((comparable) => !comparable.rejectionReason).length;
 
@@ -1409,25 +1449,33 @@ function ComparableRemixSection({
         <StatusPill label={`${usableCount} usable comp${usableCount === 1 ? "" : "s"}`} tone={usableCount > 0 ? "success" : "warning"} />
         <Text selectable style={styles.helperText}>Not a verbatim copy. It remixes title, condition, price, and buyer-safe copy.</Text>
       </View>
-      {sortedComparables.length > 0 ? (
-        <View style={styles.remixList}>
-          {sortedComparables.map((comparable, index) => (
-            <ComparableRemixCard
-              key={`${comparable.itemId ?? (comparable.itemWebUrl || comparable.title)}-${index}`}
-              comparable={comparable}
-              onOpenComparable={onOpenComparable}
-              onRemix={onRemix}
-            />
-          ))}
-        </View>
-      ) : (
-        <View style={styles.emptyCompState}>
-          <Text selectable style={styles.emptyCompTitle}>No trusted comps yet</Text>
-          <Text selectable style={styles.bodyText}>
-            ListingOS will still let you publish with a seller-confirmed price, but remix templates appear once eBay search returns usable matches.
-          </Text>
-        </View>
-      )}
+      <DisclosureRow
+        title="Comparable remix tools"
+        meta={`${sortedComparables.length} available`}
+        expanded={showComparables}
+        onPress={() => setShowComparables((current) => !current)}
+      />
+      {showComparables ? (
+        sortedComparables.length > 0 ? (
+          <View style={styles.remixList}>
+            {sortedComparables.map((comparable, index) => (
+              <ComparableRemixCard
+                key={`${comparable.itemId ?? (comparable.itemWebUrl || comparable.title)}-${index}`}
+                comparable={comparable}
+                onOpenComparable={onOpenComparable}
+                onRemix={onRemix}
+              />
+            ))}
+          </View>
+        ) : (
+          <View style={styles.emptyCompState}>
+            <Text selectable style={styles.emptyCompTitle}>No trusted comps yet</Text>
+            <Text selectable style={styles.bodyText}>
+              ListingOS will still let you publish with a seller-confirmed price, but remix templates appear once eBay search returns usable matches.
+            </Text>
+          </View>
+        )
+      ) : null}
     </SurfaceCard>
   );
 }
@@ -2068,7 +2116,7 @@ const createStyles = (palette: Palette) => StyleSheet.create({
     gap: 10,
     flexWrap: "wrap",
   },
-  footerStack: {
+  moreActionsStack: {
     gap: 10,
   },
   statBubble: {

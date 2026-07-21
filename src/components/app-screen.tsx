@@ -65,7 +65,7 @@ export function AppScreen({
   }, [keyboardAware]);
 
   function revealFocusedInput(target: number) {
-    if (!keyboardAware) return;
+    if (!keyboardAware || Platform.OS === "web") return;
     const reveal = () => {
       scrollViewRef.current?.scrollResponderScrollNativeHandleToKeyboard(target, 28, true);
     };

@@ -1233,7 +1233,6 @@ function SellerDashboardScreen({ footer }: { footer?: ReactNode }) {
                 disabled={Boolean(meQuery.isLoading && sessionToken)}
               />
               {heroAsset ? <AppButton label="Replace photos" tone="secondary" onPress={choosePhotos} /> : null}
-              <AppButton label="Preview ListingOS Market beta" tone="secondary" onPress={() => router.push("/market" as never)} />
               {lastBatchId ? (
                 <AppButton label="Open last listing" tone="secondary" onPress={() => router.push(`/batches/${lastBatchId}`)} />
               ) : null}

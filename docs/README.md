@@ -32,7 +32,7 @@ This is the source-of-truth map for the public `ListingOS-AI` repository. Start 
 
 - [MVP final cut](MVP_FINAL_CUT_2026-07-21.md) - ship/label/cut triage, remaining blockers, and time allocation for the final push.
 - [Claims ledger](CLAIMS.md) - evidence-backed wording for demos, judges, and public copy. Present tense only.
-- [Roadmap](ROADMAP.md) - multi-marketplace, camera, and on-device AI plans. The only doc that speaks in future tense.
+- [Roadmap](ROADMAP.md) - multi-marketplace, camera, on-device AI, and Seller Copilot companion plans. The only doc that speaks in future tense.
 - [Devpost submission](DEVPOST_SUBMISSION.md) - canonical submission copy and form content.
 - [Submission checklist](SUBMISSION_CHECKLIST.md) - final technical, video, and administrative gates.
 - [Final video handoff](../ListingOS-Hackathon-Demo-Assets/final-renders/README.md) - intended 2:30 replacement, media QA, checksum, and external upload steps.
