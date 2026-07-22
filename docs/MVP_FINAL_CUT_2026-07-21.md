@@ -1,5 +1,8 @@
 # ListingOS — Six-Hour Final Cut
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** Treat this as a time-boxed plan; current code and runtime status are recorded separately. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 **Snapshot:** 2026-07-21, final submission day
 
 **Deadline:** 5:00 PM Pacific
@@ -35,9 +38,9 @@ Proof Mode section at the time of this audit. The Devpost story tells judges to 
 the deployment must match the instruction.
 
 ```sh
-npm run web:export:proof
+EXPO_PUBLIC_PROOF_MODE=true npm run web:export
 npm run web:serve
-npm run web:deploy:proof
+EXPO_PUBLIC_PROOF_MODE=true npm run web:deploy:production
 ```
 
 - [ ] Open `https://listingos.expo.app` signed out.

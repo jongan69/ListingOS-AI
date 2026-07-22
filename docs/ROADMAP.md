@@ -1,5 +1,8 @@
 # Roadmap
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** Market publish/feed/inquiry persistence exists in source, but deployment repair, real email verification, and seller reply UX remain roadmap work. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 This is the only document in the repo that speaks in future tense. Everything here is
 **planned, not shipped.**
 
@@ -220,3 +223,15 @@ For anyone writing public copy, these pairs are the easiest mistakes to make:
 The pattern: **name the shipped capability precisely, then state the ambition separately in
 future tense.** The roadmap is a stronger story when it is clearly labelled as one, and a
 liability when it is smuggled into a present-tense sentence.
+
+<!-- CURRENT-ROADMAP-2026-07-21 -->
+## Current Priority Order
+
+1. Repair and verify the deployed Market feed and remote D1 migration state.
+2. Complete native RevenueCat sandbox purchase, restore, restart, offering, and webhook proof on both stores.
+3. Create RevenueCat Billing products and populate hosted web purchase links; verify return-state synchronization.
+4. Replace configured-code Market verification with real email delivery.
+5. Add seller inbox/reply UX before claiming a two-sided messaging loop.
+6. Finish judge-visible demo, store metadata, release artifacts, and external submission links.
+
+Maps, checkout/escrow, real-time messaging, ratings, shipping, and additional marketplaces remain out of the Build Week cut.

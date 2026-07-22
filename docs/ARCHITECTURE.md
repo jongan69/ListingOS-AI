@@ -1,5 +1,8 @@
 # Architecture
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** Source architecture includes RevenueCat trust boundaries and D1-backed Market beta resources. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 ## Design Goals
 
 ListingOS optimizes for the shortest safe path from product photos to a live eBay listing:
@@ -143,3 +146,12 @@ Public photos use `GET /api/public/photos/:photoId`. This route is intentionally
 - Auction support needs a dedicated Trading API adapter and end-to-end tests before being treated as production-ready.
 - Public OAuth initiation, health, upload-token, and photo routes do not yet have dedicated rate limiting or abuse controls.
 - App session IDs are opaque bearer tokens stored directly in D1. A hardened public release should store only a token hash and support explicit revocation/rotation.
+
+<!-- CURRENT-ARCHITECTURE-2026-07-21 -->
+## Current Architecture Addendum
+
+The Expo app owns routes and screen orchestration; src/shared/contracts.ts is the mobile/Worker contract source of truth. The Cloudflare Worker owns eBay OAuth/publishing, AI/queue orchestration, server-authoritative billing, uploads, public photos, and Market beta HTTP behavior.
+
+D1 Market migrations create buyer identities/sessions, public listings, threads, messages, blocks, reports, and rate events. The web app provides public /market and listing-detail routes. Native seller inbox/reply UX is not part of the current implementation.
+
+RevenueCat has separate trust paths: native public SDK keys by platform, hosted purchase links on web, and Worker-only REST/webhook credentials. Never infer entitlements from client state alone.

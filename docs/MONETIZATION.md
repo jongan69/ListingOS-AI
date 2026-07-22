@@ -1,5 +1,8 @@
 # Monetization Plan
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** Runtime quotas are Free 20, Starter 75, Pro 300, and Studio 1,000. Older unit-economics quotas are historical scenarios. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 > **Product-plan status:** current mobile photo intake is review-first and exposes no
 > autopublish control. The Worker retains a guarded, entitlement-aware `autoPublish: true`
 > capability for explicit API callers, but it is not a public tier benefit and must not be
@@ -214,7 +217,7 @@ Implemented:
 - Native builds initialize RevenueCat by `EXPO_PUBLIC_REVENUECAT_MODE`:
   - `production` → `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` / `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`
   - `test` → `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`
-  - optional migration fallback: `EXPO_PUBLIC_REVENUECAT_PROD_API_KEY` when a platform key is temporarily missing
+  - optional migration fallback: `platform-specific RevenueCat production public key` when a platform key is temporarily missing
 - RevenueCat identity is linked to the seller account as `seller:{sellerAccountId}` after eBay login.
 - The app syncs RevenueCat active entitlements to the Worker.
 - The Worker stores `billing_profiles`, `usage_periods`, and `usage_events`.
@@ -331,3 +334,10 @@ Paywall trigger points:
 - Subscriptions can include a monthly credit allowance.
 - Consumable credit packs are reasonable for overflow usage.
 - Unlimited lifetime access is not safe for an AI-heavy product.
+
+<!-- CURRENT-MONETIZATION-2026-07-21 -->
+## Current Billing Contract
+
+The enforced monthly quotas are Free 20, Starter 75, Pro 300, and Studio 1,000. Any older 25/150/750 values in financial scenarios are not runtime limits.
+
+Native production uses EXPO_PUBLIC_REVENUECAT_IOS_API_KEY and EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY; there is no shared production-key fallback. Web conversion requires non-empty RevenueCat-hosted purchase links. Store product availability, successful sandbox transactions, entitlement restoration, and webhook traces must be verified outside the repository before billing is called production-ready.

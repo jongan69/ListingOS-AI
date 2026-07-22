@@ -1,5 +1,8 @@
 # Release And Demo Packaging
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** Preview and production profiles use production-mode platform keys; public legal/support routes are live, while the deployed Market feed is currently failing. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 ListingOS can be demoed as a standalone Android app without Expo Go, Metro, or a USB cable after installation.
 
 ## Current production snapshot (as of 2026-07-20)
@@ -34,7 +37,7 @@ Use this only for payment checks. It is production-safe once EAS profile values 
 | Local debug (recommended) | `npm run dev:tunnel` | `.env` or shell override | `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` | Native dev-client only; test-mode SDK diagnostics should appear. |
 | Local clean native rebuild | `npx expo run:ios --device` / `npx expo run:android --device` | `.env` | `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` | Same as above after native build refresh. |
 | EAS dev-client (`development` / `preview`) | `npx eas-cli@latest build -p ios|android --profile development|preview` | `test` (from profile) | `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` (or build profile override) | Shared profile for internal QA and payment checks. |
-| EAS release/dev-client (`production`) | `npx eas-cli@latest build -p ios|android --profile production` | `production` (from profile) | `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` / `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` (plus optional `EXPO_PUBLIC_REVENUECAT_PROD_API_KEY` fallback only) | Real build-path verification only; never uses test store keys. |
+| EAS release/dev-client (`production`) | `npx eas-cli@latest build -p ios|android --profile production` | `production` (from profile) | `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` / `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` (plus optional `platform-specific RevenueCat production public key` fallback only) | Real build-path verification only; never uses test store keys. |
 | Expo Go | `npx expo start` | n/a | n/a | **Not supported for payment checks.** Native Billing SDK must be present.
 
 ### Release verification command bundle
@@ -131,7 +134,7 @@ Search `startup_trace.log` for the `[RevenueCat] mode=` line and verify that it 
 1. Keep local `.env` at `EXPO_PUBLIC_REVENUECAT_MODE=test` for dev-device checks.
 2. Add explicit `EXPO_PUBLIC_REVENUECAT_MODE=production` and platform keys in `eas.json -> build.production.env`.
 3. Keep `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` in local/dev profiles only.
-4. Keep `EXPO_PUBLIC_REVENUECAT_PROD_API_KEY` as a temporary fallback only while `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` and `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` are being validated.
+4. Keep `platform-specific RevenueCat production public key` as a temporary fallback only while `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` and `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` are being validated.
 5. Add release validation using `eas env:list`, startup trace, and one reproducibility rerun.
 
 ### Rollback steps
@@ -217,9 +220,9 @@ the time-limited judge website only, build and inspect the fixture-backed artifa
 then deploy it with the dedicated command:
 
 ```sh
-npm run web:export:proof
+EXPO_PUBLIC_PROOF_MODE=true npm run web:export
 npm run web:serve
-npm run web:deploy:proof
+EXPO_PUBLIC_PROOF_MODE=true npm run web:deploy:production
 ```
 
 `web:deploy:proof` sets `EXPO_PUBLIC_PROOF_MODE=true` only while exporting the public web
@@ -325,3 +328,12 @@ Before pushing App Store metadata, replace any account-specific review contact d
 - Do not show `.env`, eBay credentials, OpenAI keys, or Cloudflare secrets.
 - Do not create extra production eBay listings unless the demo explicitly needs a live publish.
 - If publishing live, verify the buyer-facing listing and media before claiming success.
+
+<!-- CURRENT-RELEASE-SNAPSHOT-2026-07-21 -->
+## July 21, 2026 Release Snapshot
+
+Public app, support, privacy, terms, deletion, and Market shell URLs returned 200. The deployed public Market feed returned 500 and is not release-ready.
+
+Development EAS configuration may use RevenueCat Test Store mode. Preview, production, and TestFlight demo profiles use production mode with platform-specific iOS/Android public SDK keys. Web checkout remains unavailable while hosted purchase links are empty.
+
+For fixture-backed web proof, set the environment explicitly: EXPO_PUBLIC_PROOF_MODE=true npm run web:deploy:production.

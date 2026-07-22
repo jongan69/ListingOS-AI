@@ -1,5 +1,8 @@
 <div align="center">
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** The verified core is the camera-to-reviewed-fixed-price-eBay workflow. RevenueCat still requires store transaction proof, and the deployed Market API is currently blocked. See [Current Implementation State](docs/CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 <img src="assets/icon.png" width="112" height="112" alt="ListingOS logo" />
 
 # ListingOS

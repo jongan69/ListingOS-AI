@@ -1,5 +1,8 @@
 # ListingOS Market Beta: Build Week Execution Plan
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** This is a planning document. The implemented beta is narrower, and the deployed public feed currently returns HTTP 500. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 > **Historical planning document — not a shipped-feature claim.** As audited on 2026-07-21,
 > only part of this plan exists. An experimental public listing/feed and seller-controlled
 > beta publish surface is present, but buyer inquiry is controlled-demo-only, outbound email

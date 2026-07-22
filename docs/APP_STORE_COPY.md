@@ -1,5 +1,8 @@
 # App Store And Launch Copy
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** Store copy should center the verified eBay workflow; Market beta should not be a launch promise until its deployed API is healthy. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 Use this file as the canonical public copy for App Store Connect, Google Play, Devpost, launch pages, demo narration, and screenshots.
 
 ## Positioning

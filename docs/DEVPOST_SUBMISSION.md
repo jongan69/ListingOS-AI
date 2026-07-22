@@ -1,5 +1,8 @@
 # Devpost Submission Pack
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** Submission copy must describe only behavior supported by current evidence and must not present the Market beta or cross-platform billing as fully production-proven. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 This file is the source copy for the OpenAI Build Week submission. Do not paste secrets, production seller tokens, or private eBay account data into public Devpost fields.
 
 Canonical companion docs:
@@ -269,7 +272,7 @@ Ordered by what gates what. Deadline 2026-07-21, 5:00 PM Pacific.
 
 1. **Deploy the dedicated Proof Mode web build.** The live site returned HTTP 200 during
    the audit, but its deployed HTML did not visibly expose Proof Mode. Run
-   `npm run web:deploy:proof`, then open all three scenarios signed out and confirm every
+   `EXPO_PUBLIC_PROOF_MODE=true npm run web:deploy:production`, then open all three scenarios signed out and confirm every
    marketplace mutation remains disabled.
 2. **Replace the current YouTube upload.** The attached public video is exactly 3:00 and an
    accidental duplicate/raw take starts after the polished ending at 2:30. Upload the
@@ -283,3 +286,8 @@ Ordered by what gates what. Deadline 2026-07-21, 5:00 PM Pacific.
    video, six screenshots, and Proof Mode URL in a private window after the final save.
 
 Before final submission, run the repo-level checklist in [`docs/SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md).
+
+<!-- CURRENT-DEVPOST-SCOPE-2026-07-21 -->
+## Current Devpost Scope Guardrail
+
+Lead with the verified camera-to-AI-review-to-fixed-price-eBay workflow. Market beta may be described as implemented source work or a controlled preview, not a live end-to-end marketplace while its public API is failing. RevenueCat may be described as integrated; say cross-platform payments are production-ready only after native store and web hosted-checkout evidence exists.

@@ -1,5 +1,8 @@
 # Operations
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** Operational proof must separate source, remote configuration, deployment health, store state, and external publication. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 ## Environment Separation
 
 The mobile app and Worker have different configuration boundaries.
@@ -249,3 +252,12 @@ Never log bearer sessions, eBay access/refresh tokens, OpenAI keys, or decrypted
 ## Dependency Audit Note
 
 Use `npm audit` as an input, not an automatic upgrade command. Expo’s toolchain may report transitive development advisories whose suggested fix is an incompatible Expo downgrade. Do not run `npm audit fix --force`; evaluate Expo-compatible upgrades through the normal SDK upgrade process.
+
+<!-- CURRENT-OPERATIONS-2026-07-21 -->
+## Current Operations Addendum
+
+Required client configuration includes EXPO_PUBLIC_REVENUECAT_MODE, platform-specific iOS/Android public keys, the offering identifier, and JSON hosted links for web checkout. EXPO_PUBLIC_REVENUECAT_TEST_API_KEY is development-only.
+
+Required Worker configuration includes RevenueCat secret/webhook credentials. The controlled Market inquiry demo additionally requires MARKET_EMAIL_VERIFICATION_DEMO_CODE as a Worker secret; leaving it unset correctly disables demo verification.
+
+Before a Market demo, list/apply remote D1 migrations, inspect Worker logs, and confirm GET /api/public/market/listings returns 200. The July 21 production check returned 500, so Market deployment is currently a release blocker.

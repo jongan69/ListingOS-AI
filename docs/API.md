@@ -1,5 +1,8 @@
 # API Reference
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** The Worker now includes billing, first-party demo sessions, and Market beta routes; deployed behavior still requires independent verification. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 The mobile app communicates with the Cloudflare Worker using JSON over HTTPS. Shared response contracts live in `src/shared/contracts.ts` and are validated with Zod on both sides where applicable.
 
 ## Conventions
@@ -211,3 +214,18 @@ Returns the most recent publish attempt:
 ### `GET /health`
 
 Returns configuration presence for OpenAI, eBay, D1, R2, and Queues. It does not perform paid or mutating upstream calls.
+
+<!-- CURRENT-API-SURFACE-2026-07-21 -->
+## Current API Surface Addendum
+
+The Worker currently exposes these route families:
+
+- eBay session: connect, pending state, callback, current session, and logout.
+- First-party buyer demo session: POST /api/session/email/start, POST /api/session/email/verify, POST /api/session/logout, and GET /api/session/me.
+- Billing: summary, sync/events, RevenueCat webhook handling, and webhook traces.
+- Processing: uploads, camera sessions, drafts, queue operations, and status.
+- eBay: verification, fixed-price publish, publish-all, and publish status.
+- ListingOS Market seller routes: publish by draft, unpublish, mark sold, and list mine.
+- ListingOS Market public routes: feed, detail, inquiry, inquiry verification, buyer thread read/message, and report.
+
+Market session verification is controlled by MARKET_EMAIL_VERIFICATION_DEMO_CODE; it does not send email. Public feed cursor input is accepted, but the current implementation returns nextCursor: null. All authenticated and public clients must handle explicit error responses and retry only safe, idempotent operations.

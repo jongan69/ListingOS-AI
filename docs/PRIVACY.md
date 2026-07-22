@@ -1,5 +1,8 @@
 # ListingOS Privacy Notes
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** Privacy claims must continue to match actual photo, eBay, billing, Market beta, and deletion behavior. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 ListingOS is a camera-first AI listing tool for creating eBay listings from product photos.
 It also contains an experimental ListingOS Market public-listing beta. Buyer messaging is a
 controlled demo surface; outbound email delivery and a native seller inbox are not shipped.

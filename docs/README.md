@@ -1,5 +1,8 @@
 # ListingOS Documentation
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** Use the current-state document before relying on historical plans, scripts, or checklists. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 This is the source-of-truth map for the public `ListingOS-AI` repository. Start with the root README, then use the category that matches the work. Dated audits and submission documents describe their stated snapshot and do not override runtime configuration or current release evidence.
 
 ## Read First

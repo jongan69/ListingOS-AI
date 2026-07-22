@@ -1,100 +1,54 @@
-# Web Store-Facing Route Evidence
+# Web and Store-Facing Pages
 
-## Current status snapshot (2026-07-20)
+Last checked: **July 21, 2026**.
 
-- Public web routes in this repo are implemented at the `src/app` level, and local dev checks continue to pass.
-- Production `listingos.expo.app` checks for `/app-support`, `/privacy`, `/terms`, `/support`, and `/legal/terms` still return `HTTP/2 404` in this workspace snapshot, while local route checks return `200`.
-- Canonical support/privacy links for App Store and support workflows remain the Worker routes:
-  - `https://seller-ai-platform.jonathang132298.workers.dev/app-support`
-  - `https://seller-ai-platform.jonathang132298.workers.dev/privacy`
+## Current production routes
 
-## Scope
+These routes returned HTTP 200 at https://listingos.expo.app:
 
-- Added public web routes in `src/app` only:
-  - `/app-support` (canonical support page)
-  - `/privacy`
-  - `/terms`
-  - `/support` (legacy alias → `/app-support`)
-  - `/legal/terms` (legacy alias → `/terms`)
-- Added shared footer links for web routes:
-  - Home
-  - Support
-  - Privacy
-  - Terms
-- Kept copy constrained to shipped capabilities:
-  - fixed-price eBay publishing only
-  - AI assists draft generation and review
-  - no guaranteed outcomes language
-- Added App-Review-safe copy updates:
-  - explicit manual-publish limitation wording
-  - explicit no-auction/ no-guarantee language
-  - no secret handling claims
-- Updated copy to match the shipped workflow from `docs/APP_STORE_COPY.md` and `docs/PRIVACY.md`.
-  - support scope
-  - data types and storage paths (Cloudflare R2/D1/KV)
-  - fixed publish warning: `Publishing with production credentials can create live eBay listings.`
+| Purpose | Route |
+|---|---|
+| Product landing/app | / |
+| App support | /app-support |
+| Support alias | /support |
+| Privacy | /privacy |
+| Terms | /terms |
+| Terms alias | /legal/terms |
+| Account deletion | /deletion |
+| Market beta shell | /market |
+| Market listing detail | /market/[slug] |
 
-## Evidence commands executed
+Worker-hosted /app-support and /privacy also returned 200.
 
-### 1) Local web export and route smoke checks
+## Recommended store metadata URLs
 
-```bash
-npm run web:export
-curl -I http://localhost:8081/app-support
-curl -I http://localhost:8081/privacy
-curl -I http://localhost:8081/terms
-curl -I http://localhost:8081/support
-curl -I http://localhost:8081/legal/terms
-```
+- Support URL: https://listingos.expo.app/app-support
+- Privacy Policy URL: https://listingos.expo.app/privacy
+- Terms URL: https://listingos.expo.app/terms
+- Account deletion URL: https://listingos.expo.app/deletion
+- Marketing URL: https://listingos.expo.app/
 
-Observed in this workspace:
+## Important distinction
 
-- local dev server route probes returned `HTTP/1.1 200 OK` for each required URL when running from Expo web dev server.
-- `/support` and `/legal/terms` redirected through route mapping and also returned `200 OK`.
+A route returning 200 proves only that the page shell is reachable. It does not prove every API behind that page is healthy.
 
-### 2) Local screenshot capture (desktop + mobile)
+On July 21, 2026, the Worker endpoint GET /api/public/market/listings returned HTTP 500. Therefore /market must not be treated as a working end-to-end marketplace until the Worker deployment and remote D1 migrations are repaired and verified.
 
-```bash
-mkdir -p artifacts/web-store-pages
-npx playwright screenshot --wait-for-timeout=5000 --full-page --viewport-size=1440,900 http://localhost:8081/app-support artifacts/web-store-pages/app-support-desktop.png
-npx playwright screenshot --wait-for-timeout=5000 --full-page --viewport-size=390,844 http://localhost:8081/app-support artifacts/web-store-pages/app-support-mobile.png
-npx playwright screenshot --wait-for-timeout=5000 --full-page --viewport-size=1440,900 http://localhost:8081/privacy artifacts/web-store-pages/privacy-desktop.png
-npx playwright screenshot --wait-for-timeout=5000 --full-page --viewport-size=390,844 http://localhost:8081/privacy artifacts/web-store-pages/privacy-mobile.png
-npx playwright screenshot --wait-for-timeout=5000 --full-page --viewport-size=1440,900 http://localhost:8081/terms artifacts/web-store-pages/terms-desktop.png
-npx playwright screenshot --wait-for-timeout=5000 --full-page --viewport-size=390,844 http://localhost:8081/terms artifacts/web-store-pages/terms-mobile.png
-```
+## Proof Mode deployment
 
-Captured files:
+Enable the flag explicitly:
 
-- `artifacts/web-store-pages/app-support-desktop.png`
-- `artifacts/web-store-pages/app-support-mobile.png`
-- `artifacts/web-store-pages/privacy-desktop.png`
-- `artifacts/web-store-pages/privacy-mobile.png`
-- `artifacts/web-store-pages/terms-desktop.png`
-- `artifacts/web-store-pages/terms-mobile.png`
+~~~bash
+EXPO_PUBLIC_PROOF_MODE=true npm run web:deploy:production
+~~~
 
-### 3) Required command transcript before submission
+Do not assume a script name enables Proof Mode. Native production profiles must keep it disabled.
 
-```bash
-npm run check
-curl -I https://listingos.expo.app/app-support
-curl -I https://listingos.expo.app/privacy
-curl -I https://listingos.expo.app/terms
-```
+## Store review checklist
 
-Observed in this workspace:
-
-- `npm run check` currently fails on pre-existing repo warnings in `worker/index.ts`:
-  - `@typescript-eslint/array-type`
-  - `@typescript-eslint/no-unused-vars` (`escapeLikePattern`)
-- Public URL probes for `listingos.expo.app` currently returned `HTTP/2 404` for all tested routes in this workspace snapshot, so store-submission support/terms references should stay on Worker URLs until deployment is fixed.
-
-## Route list summary
-
-- `src/app/app-support.tsx`
-- `src/app/privacy.tsx`
-- `src/app/terms.tsx`
-- `src/app/support.tsx` (alias)
-- `src/app/legal/terms.tsx` (alias)
-- `src/app/index.tsx` (web footer links)
-- `src/app/_layout.tsx` (route registrations)
+- Public routes open without authentication.
+- Support provides a monitored contact method.
+- Privacy describes photo, account, marketplace, billing, and deletion behavior accurately.
+- Terms do not promise Market payments or unimplemented moderation.
+- Account deletion instructions match the in-app flow.
+- App Store Connect has content rights, primary category, build, contact information, privacy answers, description, keywords, and support URL completed by an Admin.

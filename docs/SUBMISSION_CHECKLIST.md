@@ -1,5 +1,8 @@
 # Final Submission Checklist
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** The remaining gates are deployment/store/demo evidence, not additional feature claims. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 Use this as the single deadline checklist. Checked items were verified during the
 2026-07-21 audit; unchecked items still require action or fresh confirmation.
 
@@ -7,7 +10,7 @@ Use this as the single deadline checklist. Checked items were verified during th
 
 - [ ] Merge the review-first publish safety changes.
 - [ ] Run `npm run verify:submission` on the final merged worktree.
-- [ ] Deploy the dedicated judge web build with `npm run web:deploy:proof`.
+- [ ] Deploy the dedicated judge web build with `EXPO_PUBLIC_PROOF_MODE=true npm run web:deploy:production`.
 - [ ] Verify all three Proof Mode scenarios signed out at `https://listingos.expo.app`.
 - [ ] Upload the prepared 2:30 YouTube replacement documented in
       [`final-renders/README.md`](../ListingOS-Hackathon-Demo-Assets/final-renders/README.md).
@@ -67,7 +70,7 @@ the final judge artifact.
 Use the dedicated command:
 
 ```sh
-npm run web:deploy:proof
+EXPO_PUBLIC_PROOF_MODE=true npm run web:deploy:production
 ```
 
 Do not enable Proof Mode in native production EAS profiles.
@@ -120,3 +123,11 @@ Then perform the minimum smoke pass:
 
 Store approval and production subscriptions are not hackathon critical-path items. Do not
 let them preempt the P0 list above.
+
+<!-- CURRENT-SUBMISSION-GATES-2026-07-21 -->
+## Current Submission Gates
+
+- Green: public landing, support, privacy, terms, deletion, and Market shell routes return 200.
+- Yellow: native billing source is implemented but requires store sandbox and webhook evidence.
+- Red: deployed Market feed returns 500; omit the end-to-end Market claim unless repaired and reverified.
+- External: final public under-three-minute video, store dashboards, selected builds, release artifacts, and accepted submission links require manual evidence.

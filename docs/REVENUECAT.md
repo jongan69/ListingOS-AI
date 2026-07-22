@@ -1,5 +1,8 @@
 # RevenueCat
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** Native uses platform-specific public SDK keys; web uses configured hosted purchase links; server credentials remain Worker-only. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 Single source of truth for billing. Replaces the five overlapping RevenueCat documents
 that described the pre-2026-07-21 broken state.
 

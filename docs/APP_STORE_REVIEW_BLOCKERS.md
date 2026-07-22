@@ -1,5 +1,8 @@
 # App Store Connect Review Blocker Log
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** Dashboard completion and build selection remain manual App Store Connect evidence gates. See [Current Implementation State](./CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 ## Objective
 
 Clear all required metadata and listing fields using repository-backed values so the app can move from `Unable to Add for Review` to a valid submission state.

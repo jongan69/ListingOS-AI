@@ -1,5 +1,8 @@
 # ListingOS Hackathon Demo Assets
 
+<!-- CURRENT-STATE-AUTHORITY -->
+> **Accuracy note, July 21, 2026:** Demo assets may contain historical scripts; current claims are governed by the repository current-state and claims documents. See [Current Implementation State](../docs/CURRENT_STATE.md) for the authoritative implementation and deployment snapshot.
+
 Production workbench for the ListingOS demo video: script, fixtures, capture plan,
 composition source, and local output folders.
 
