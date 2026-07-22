@@ -32,6 +32,8 @@ internal class SonyPtpTransport private constructor(
     private const val RESPONSE_ACCESS_DENIED = 0x200F
     private const val HANDLE_CAPTURED_IMAGE = -0x3FFF // 0xFFFFC001
     private const val HANDLE_LIVE_VIEW = -0x3FFE // 0xFFFFC002
+    private const val PROPERTY_FOCUS_FOUND = 0xD213
+    private const val PROPERTY_OBJECT_IN_MEMORY = 0xD215
     private const val PROPERTY_LIVE_VIEW_STATUS = 0xD221
     private const val MAX_CONTAINER_BYTES = 100 * 1024 * 1024
     private const val MAX_USB_READ_BYTES = 64 * 1024
@@ -76,6 +78,7 @@ internal class SonyPtpTransport private constructor(
   private val transaction = AtomicInteger(0)
   private var sessionOpen = false
   private var liveViewTransactions = 0
+  private var capturedObjectConsumed = false
   private var bufferedInput = byteArrayOf()
   private var bufferedInputOffset = 0
 
@@ -164,32 +167,77 @@ internal class SonyPtpTransport private constructor(
   }
 
   fun captureStill() {
+    capturedObjectConsumed = false
     setButton(0xD2C1, true)
     SystemClock.sleep(90)
     setButton(0xD2C2, true)
-    SystemClock.sleep(120)
-    setButton(0xD2C2, false)
-    setButton(0xD2C1, false)
+    try {
+      // Sony's reference implementation waits briefly for the focus result
+      // before releasing the shutter buttons. Do not make focus a hard gate:
+      // manual-focus lenses and back-button-focus setups may never report it.
+      val focusDeadline = SystemClock.elapsedRealtime() + 1_000
+      while (SystemClock.elapsedRealtime() < focusDeadline) {
+        val properties = execute(0x9209, expectsData = true, allowBusy = true)
+        val focus = properties.data
+          ?.let { findSonyScalarPropertyValue(it, PROPERTY_FOCUS_FOUND) }
+          ?.unsignedScalarValue()
+        if (focus == 2L || focus == 3L) break
+        SystemClock.sleep(50)
+      }
+    } finally {
+      runCatching { setButton(0xD2C2, false) }
+      runCatching { setButton(0xD2C1, false) }
+    }
   }
 
   fun awaitCapturedJpeg(timeoutMs: Long): ByteArray {
     val deadline = SystemClock.elapsedRealtime() + timeoutMs
     while (SystemClock.elapsedRealtime() < deadline) {
       try {
-        val result = execute(
-          0x1009,
-          intArrayOf(HANDLE_CAPTURED_IMAGE),
-          expectsData = true,
-          acceptedResponses = setOf(RESPONSE_OK, RESPONSE_INVALID_HANDLE, RESPONSE_DEVICE_BUSY),
-        )
-        val jpeg = result.data?.let(SonyPtpCodec::parseSonyJpegData)
-        if (result.responseCode == RESPONSE_OK && jpeg != null) return jpeg
+        pollCapturedJpeg()?.let { return it }
       } catch (error: SonyPtpException) {
         if (!error.retryable) throw error
       }
-      SystemClock.sleep(250)
+      SystemClock.sleep(100)
     }
     throw SonyPtpException("The camera fired, but no JPEG reached ListingOS. Check PC Remote save settings and JPEG output.")
+  }
+
+  fun pollCapturedJpeg(): ByteArray? {
+    val properties = execute(0x9209, expectsData = true, allowBusy = true)
+    val objectInMemory = properties.data
+      ?.let { findSonyScalarPropertyValue(it, PROPERTY_OBJECT_IN_MEMORY) }
+      ?.unsignedScalarValue()
+    if (objectInMemory == null || objectInMemory < 0x8000) {
+      capturedObjectConsumed = false
+      return null
+    }
+    if (capturedObjectConsumed) return null
+    trace("Sony captured-object ready D215=${"0x%04X".format(objectInMemory)}")
+
+    // Sony warns that reading the virtual captured-image handle before D215
+    // reaches 0x8000 can crash camera firmware. ObjectInfo must also be read
+    // before GetObject for Sony's virtual handle.
+    val info = execute(
+      0x1008,
+      intArrayOf(HANDLE_CAPTURED_IMAGE),
+      expectsData = true,
+      acceptedResponses = setOf(RESPONSE_OK, RESPONSE_INVALID_HANDLE, RESPONSE_DEVICE_BUSY),
+    )
+    if (info.responseCode != RESPONSE_OK) return null
+    val result = execute(
+      0x1009,
+      intArrayOf(HANDLE_CAPTURED_IMAGE),
+      expectsData = true,
+      acceptedResponses = setOf(RESPONSE_OK, RESPONSE_INVALID_HANDLE, RESPONSE_DEVICE_BUSY),
+    )
+    if (result.responseCode != RESPONSE_OK) return null
+    val jpeg = result.data?.let(SonyPtpCodec::parseSonyJpegData)
+      ?: throw SonyPtpException(
+        "Sony transferred the captured object, but it did not contain a readable JPEG (bytes=${result.data?.size ?: 0}).",
+      )
+    capturedObjectConsumed = true
+    return jpeg
   }
 
   fun close() {
@@ -356,6 +404,13 @@ private fun ByteArray?.contentEqualsNullable(other: ByteArray?): Boolean = when 
 
 private fun ByteArray.hexBytes(): String = joinToString(" ") { byte -> "%02X".format(byte.toInt() and 0xFF) }
 
+private fun ByteArray.unsignedScalarValue(): Long? = when (size) {
+  1 -> this[0].toLong() and 0xFF
+  2 -> u16(0).toLong()
+  4 -> u32(0)
+  else -> null
+}
+
 private fun findSonyScalarPropertyValue(data: ByteArray, propertyCode: Int): ByteArray? {
   if (data.size < 16) return null
   for (offset in 8..data.size - 8) {
@@ -389,9 +444,9 @@ internal object SonyPtpCodec {
     if (data.size < 4) return null
     val suggestedOffset = data.u32(0).toInt()
     val searchStart = if (suggestedOffset in 0 until data.size - 1) suggestedOffset else 0
-    val start = (searchStart until data.size - 1).firstOrNull {
-      data[it] == 0xFF.toByte() && data[it + 1] == 0xD8.toByte()
-    } ?: return null
+    val start = (
+      findJpegStart(data, searchStart) ?: if (searchStart == 0) null else findJpegStart(data, 0)
+    ) ?: return null
     var end = data.size
     for (index in data.size - 2 downTo start + 2) {
       if (data[index] == 0xFF.toByte() && data[index + 1] == 0xD9.toByte()) {
@@ -401,6 +456,11 @@ internal object SonyPtpCodec {
     }
     return data.copyOfRange(start, end)
   }
+
+  private fun findJpegStart(data: ByteArray, searchStart: Int): Int? =
+    (searchStart until data.size - 1).firstOrNull {
+      data[it] == 0xFF.toByte() && data[it + 1] == 0xD8.toByte()
+    }
 }
 
 private fun IntArray.toPayload(): ByteArray {

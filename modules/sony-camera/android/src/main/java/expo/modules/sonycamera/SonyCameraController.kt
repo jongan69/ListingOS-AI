@@ -78,7 +78,7 @@ internal class SonyCameraController(private val context: Context) {
           val detached = intent.usbDevice()
           permissionRequestPending.set(false)
           trace("device detached ${detached?.let(::describeDevice) ?: "unknown"}")
-          if (detached == null || detached.deviceId == device?.deviceId) disconnectBlocking()
+          if (detached == null || detached.deviceId == device?.deviceId) disconnectBlocking(preserveLiveViewRequest = true)
         }
         UsbManager.ACTION_USB_DEVICE_ATTACHED -> handleIntent(intent)
       }
@@ -246,6 +246,9 @@ internal class SonyCameraController(private val context: Context) {
             // pacing window; the camera needs a short quiet interval here.
             startedAt = SystemClock.elapsedRealtime()
           }
+          if (frameCount > 0 && frameCount % 10 == 0) {
+            activeTransport.pollCapturedJpeg()?.let(::persistCapturedJpeg)
+          }
           val jpeg = activeTransport.getLiveViewJpeg()
           if (jpeg != null && jpeg.isNotEmpty()) {
             frameCount += 1
@@ -266,7 +269,7 @@ internal class SonyCameraController(private val context: Context) {
           fail(error)
           break
         }
-        val remaining = 250L - (SystemClock.elapsedRealtime() - startedAt)
+        val remaining = 100L - (SystemClock.elapsedRealtime() - startedAt)
         if (remaining > 0) SystemClock.sleep(remaining)
       }
       if (state == "streaming") updateState("ready", "Sony A7 III is ready.")
@@ -274,7 +277,11 @@ internal class SonyCameraController(private val context: Context) {
   }
 
   fun stopLiveView() {
-    liveViewRequested.set(false)
+    stopLiveView(preserveRequest = false)
+  }
+
+  private fun stopLiveView(preserveRequest: Boolean) {
+    if (!preserveRequest) liveViewRequested.set(false)
     streaming.set(false)
     frameFuture?.cancel(false)
     frameFuture = null
@@ -282,31 +289,18 @@ internal class SonyCameraController(private val context: Context) {
   }
 
   fun capturePhotoBlocking(): Map<String, Any?> {
-    val resumeStream = streaming.get()
-    stopLiveView()
+    val resumeStream = liveViewRequested.get() || streaming.get()
+    stopLiveView(preserveRequest = true)
     return try {
       val result = executor.submit<Map<String, Any?>> {
       val activeTransport = transport ?: throw SonyPtpException("Sony camera is not connected.")
       updateState("capturing", "Capturing on Sony A7 III…")
       activeTransport.captureStill()
-      val jpeg = activeTransport.awaitCapturedJpeg(10_000)
-      val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
-        ?: throw SonyPtpException("Sony returned an unreadable image.")
-      val name = "listingos-sony-${System.currentTimeMillis()}.jpg"
-      val output = File(context.cacheDir, name)
-      FileOutputStream(output).use { it.write(jpeg) }
-      val payload = mapOf(
-        "uri" to Uri.fromFile(output).toString(),
-        "width" to bitmap.width,
-        "height" to bitmap.height,
-        "fileName" to name,
-        "mimeType" to "image/jpeg",
-      )
-      bitmap.recycle()
-      listeners.forEach { it.onPhotoCaptured(payload) }
+      val jpeg = activeTransport.awaitCapturedJpeg(35_000)
+      val payload = persistCapturedJpeg(jpeg)
       updateState("ready", "Photo transferred from Sony A7 III.")
       payload
-      }.get(15, TimeUnit.SECONDS)
+      }.get(45, TimeUnit.SECONDS)
       if (resumeStream) startLiveView()
       result
     } catch (error: Throwable) {
@@ -315,13 +309,32 @@ internal class SonyCameraController(private val context: Context) {
     }
   }
 
-  fun disconnectBlocking(): Map<String, Any?> {
-    stopLiveView()
+  fun disconnectBlocking(preserveLiveViewRequest: Boolean = false): Map<String, Any?> {
+    stopLiveView(preserveRequest = preserveLiveViewRequest)
     val old = transport
     transport = null
     runCatching { old?.close() }
     device = findSonyPtpDevice()
     return updateState("disconnected", "Sony camera disconnected.")
+  }
+
+  private fun persistCapturedJpeg(jpeg: ByteArray): Map<String, Any?> {
+    val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
+      ?: throw SonyPtpException("Sony returned an unreadable image.")
+    val name = "listingos-sony-${System.currentTimeMillis()}.jpg"
+    val output = File(context.cacheDir, name)
+    FileOutputStream(output).use { it.write(jpeg) }
+    val payload = mapOf(
+      "uri" to Uri.fromFile(output).toString(),
+      "width" to bitmap.width,
+      "height" to bitmap.height,
+      "fileName" to name,
+      "mimeType" to "image/jpeg",
+    )
+    bitmap.recycle()
+    listeners.forEach { it.onPhotoCaptured(payload) }
+    trace("captured JPEG persisted bytes=${jpeg.size}")
+    return payload
   }
 
   fun close() {

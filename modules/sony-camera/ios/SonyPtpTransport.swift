@@ -25,10 +25,13 @@ final class SonyPtpTransport {
   private static let responseDeviceBusy: UInt16 = 0x2019
   private static let capturedImageHandle: UInt32 = 0xFFFFC001
   private static let liveViewHandle: UInt32 = 0xFFFFC002
+  private static let focusFoundProperty: UInt16 = 0xD213
+  private static let objectInMemoryProperty: UInt16 = 0xD215
   private static let liveViewStatusProperty: UInt32 = 0xD221
 
   private let camera: ICCameraDevice
   private var transactionID: UInt32 = 0
+  private var capturedObjectConsumed = false
 
   init(camera: ICCameraDevice) {
     self.camera = camera
@@ -102,31 +105,70 @@ final class SonyPtpTransport {
   }
 
   func captureStill() throws {
+    capturedObjectConsumed = false
     try setButton(0xD2C1, down: true)
     Thread.sleep(forTimeInterval: 0.09)
     try setButton(0xD2C2, down: true)
-    Thread.sleep(forTimeInterval: 0.12)
-    try setButton(0xD2C2, down: false)
-    try setButton(0xD2C1, down: false)
+    defer {
+      _ = try? setButton(0xD2C2, down: false)
+      _ = try? setButton(0xD2C1, down: false)
+    }
+    let focusDeadline = Date().addingTimeInterval(1)
+    while Date() < focusDeadline {
+      let properties = try execute(operation: 0x9209, expectsData: true, allowBusy: true)
+      let focus = properties.data
+        .flatMap { Self.sonyScalarPropertyValue(in: $0, propertyCode: Self.focusFoundProperty) }
+        .flatMap(\.unsignedScalarValue)
+      if focus == 2 || focus == 3 { break }
+      Thread.sleep(forTimeInterval: 0.05)
+    }
   }
 
   func awaitCapturedJpeg(timeout: TimeInterval) throws -> Data {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
       do {
-        let result = try execute(
-          operation: 0x1009,
-          params: [Self.capturedImageHandle],
-          expectsData: true,
-          acceptedResponses: [Self.responseOK, Self.responseInvalidHandle, Self.responseDeviceBusy]
-        )
-        if result.responseCode == Self.responseOK, let jpeg = result.data?.sonyJPEGData { return jpeg }
+        if let jpeg = try pollCapturedJpeg() { return jpeg }
       } catch let error as SonyPtpFailure where error.retryable {
         // The object handle becomes readable shortly after the exposure completes.
       }
-      Thread.sleep(forTimeInterval: 0.25)
+      Thread.sleep(forTimeInterval: 0.1)
     }
     throw SonyPtpFailure("The camera fired, but no JPEG reached ListingOS. Check PC Remote save settings and JPEG output.")
+  }
+
+  func pollCapturedJpeg() throws -> Data? {
+    let properties = try execute(operation: 0x9209, expectsData: true, allowBusy: true)
+    let objectInMemory = properties.data
+      .flatMap { Self.sonyScalarPropertyValue(in: $0, propertyCode: Self.objectInMemoryProperty) }
+      .flatMap(\.unsignedScalarValue)
+    guard let objectInMemory, objectInMemory >= 0x8000 else {
+      capturedObjectConsumed = false
+      return nil
+    }
+    if capturedObjectConsumed { return nil }
+
+    let info = try execute(
+      operation: 0x1008,
+      params: [Self.capturedImageHandle],
+      expectsData: true,
+      acceptedResponses: [Self.responseOK, Self.responseInvalidHandle, Self.responseDeviceBusy]
+    )
+    if info.responseCode != Self.responseOK { return nil }
+    let result = try execute(
+      operation: 0x1009,
+      params: [Self.capturedImageHandle],
+      expectsData: true,
+      acceptedResponses: [Self.responseOK, Self.responseInvalidHandle, Self.responseDeviceBusy]
+    )
+    if result.responseCode != Self.responseOK { return nil }
+    guard let jpeg = result.data?.sonyJPEGData else {
+      throw SonyPtpFailure(
+        "Sony transferred the captured object, but it did not contain a readable JPEG (bytes=\(result.data?.count ?? 0))."
+      )
+    }
+    capturedObjectConsumed = true
+    return jpeg
   }
 
   private func setButton(_ code: UInt32, down: Bool) throws {
@@ -265,11 +307,8 @@ extension Data {
     guard count >= 4 else { return nil }
     let suggestedOffset = Int(uint32LE(at: 0))
     let searchStart = suggestedOffset >= 0 && suggestedOffset < count - 1 ? suggestedOffset : 0
-    var jpegStart: Int?
-    for index in searchStart..<(count - 1) where self[index] == 0xFF && self[index + 1] == 0xD8 {
-      jpegStart = index
-      break
-    }
+    var jpegStart = jpegStartIndex(from: searchStart)
+    if jpegStart == nil, searchStart != 0 { jpegStart = jpegStartIndex(from: 0) }
     guard let jpegStart else { return nil }
     var jpegEnd = count
     if count >= jpegStart + 4 {
@@ -281,5 +320,22 @@ extension Data {
       }
     }
     return subdata(in: jpegStart..<jpegEnd)
+  }
+
+  fileprivate var unsignedScalarValue: UInt64? {
+    switch count {
+    case 1: return UInt64(self[0])
+    case 2: return UInt64(uint16LE(at: 0))
+    case 4: return UInt64(uint32LE(at: 0))
+    default: return nil
+    }
+  }
+
+  private func jpegStartIndex(from searchStart: Int) -> Int? {
+    guard searchStart >= 0, searchStart < count - 1 else { return nil }
+    for index in searchStart..<(count - 1) where self[index] == 0xFF && self[index + 1] == 0xD8 {
+      return index
+    }
+    return nil
   }
 }

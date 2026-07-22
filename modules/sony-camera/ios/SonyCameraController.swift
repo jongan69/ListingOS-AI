@@ -19,6 +19,7 @@ final class SonyCameraController: NSObject, ICDeviceBrowserDelegate, ICCameraDev
   private var transport: SonyPtpTransport?
   private var state = "disconnected"
   private var message: String?
+  private var liveViewRequested = false
   private var streaming = false
   private var connecting = false
 
@@ -70,7 +71,14 @@ final class SonyCameraController: NSObject, ICDeviceBrowserDelegate, ICCameraDev
   }
 
   func startLiveView() throws {
+    stateLock.lock()
+    liveViewRequested = true
+    stateLock.unlock()
     if transport == nil { _ = try connectBlocking() }
+    beginLiveView()
+  }
+
+  private func beginLiveView() {
     stateLock.lock()
     if streaming {
       stateLock.unlock()
@@ -83,7 +91,12 @@ final class SonyCameraController: NSObject, ICDeviceBrowserDelegate, ICCameraDev
   }
 
   func stopLiveView() {
+    stopLiveView(preserveRequest: false)
+  }
+
+  private func stopLiveView(preserveRequest: Bool) {
     stateLock.lock()
+    if !preserveRequest { liveViewRequested = false }
     streaming = false
     let shouldBecomeReady = state == "streaming"
     stateLock.unlock()
@@ -92,7 +105,7 @@ final class SonyCameraController: NSObject, ICDeviceBrowserDelegate, ICCameraDev
 
   func capturePhotoBlocking() throws -> [String: Any] {
     stateLock.lock()
-    let resumeStream = streaming
+    let resumeStream = liveViewRequested || streaming
     streaming = false
     stateLock.unlock()
 
@@ -101,19 +114,8 @@ final class SonyCameraController: NSObject, ICDeviceBrowserDelegate, ICCameraDev
         guard let transport else { throw SonyPtpFailure("Sony camera is not connected.") }
         _ = updateState("capturing", "Capturing on Sony A7 III…")
         try transport.captureStill()
-        let jpeg = try transport.awaitCapturedJpeg(timeout: 10)
-        guard let image = UIImage(data: jpeg) else { throw SonyPtpFailure("Sony returned an unreadable image.") }
-        let fileName = "listingos-sony-\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
-        try jpeg.write(to: url, options: .atomic)
-        let payload: [String: Any] = [
-          "uri": url.absoluteString,
-          "width": Int(image.size.width * image.scale),
-          "height": Int(image.size.height * image.scale),
-          "fileName": fileName,
-          "mimeType": "image/jpeg",
-        ]
-        notify { $0.sonyCameraController(self, didCapture: payload) }
+        let jpeg = try transport.awaitCapturedJpeg(timeout: 35)
+        let payload = try persistCapturedJpeg(jpeg)
         _ = updateState("ready", "Photo transferred from Sony A7 III.")
         return payload
       }
@@ -125,8 +127,8 @@ final class SonyCameraController: NSObject, ICDeviceBrowserDelegate, ICCameraDev
     }
   }
 
-  func disconnectBlocking() -> [String: Any] {
-    stopLiveView()
+  func disconnectBlocking(preserveLiveViewRequest: Bool = false) -> [String: Any] {
+    stopLiveView(preserveRequest: preserveLiveViewRequest)
     let activeCamera = camera
     transport = nil
     if let activeCamera, activeCamera.hasOpenSession {
@@ -161,7 +163,13 @@ final class SonyCameraController: NSObject, ICDeviceBrowserDelegate, ICCameraDev
   private func autoConnect(_ camera: ICCameraDevice) {
     workQueue.async { [weak self, weak camera] in
       guard let self, let camera else { return }
-      do { _ = try connectInternal(camera) } catch { fail(error) }
+      do {
+        _ = try connectInternal(camera)
+        stateLock.lock()
+        let shouldResume = liveViewRequested
+        stateLock.unlock()
+        if shouldResume { beginLiveView() }
+      } catch { fail(error) }
     }
   }
 
@@ -212,12 +220,17 @@ final class SonyCameraController: NSObject, ICDeviceBrowserDelegate, ICCameraDev
     do {
       guard let transport else { throw SonyPtpFailure("Sony camera is not connected.") }
       try transport.prepareLiveView()
+      var frameCount = 0
       while isStreaming() {
         let started = Date()
+        if frameCount > 0, frameCount % 10 == 0, let captured = try transport.pollCapturedJpeg() {
+          _ = try persistCapturedJpeg(captured)
+        }
         if let jpeg = try transport.getLiveViewJpeg(), !jpeg.isEmpty {
+          frameCount += 1
           notify { $0.sonyCameraController(self, didReceiveFrame: jpeg) }
         }
-        let remainder = 0.25 - Date().timeIntervalSince(started)
+        let remainder = 0.1 - Date().timeIntervalSince(started)
         if remainder > 0 { Thread.sleep(forTimeInterval: remainder) }
       }
       if currentState() == "streaming" { _ = updateState("ready", "Sony A7 III is ready.") }
@@ -246,6 +259,22 @@ final class SonyCameraController: NSObject, ICDeviceBrowserDelegate, ICCameraDev
     stateLock.unlock()
     transport = nil
     _ = updateState("error", error.localizedDescription)
+  }
+
+  private func persistCapturedJpeg(_ jpeg: Data) throws -> [String: Any] {
+    guard let image = UIImage(data: jpeg) else { throw SonyPtpFailure("Sony returned an unreadable image.") }
+    let fileName = "listingos-sony-\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+    try jpeg.write(to: url, options: .atomic)
+    let payload: [String: Any] = [
+      "uri": url.absoluteString,
+      "width": Int(image.size.width * image.scale),
+      "height": Int(image.size.height * image.scale),
+      "fileName": fileName,
+      "mimeType": "image/jpeg",
+    ]
+    notify { $0.sonyCameraController(self, didCapture: payload) }
+    return payload
   }
 
   @discardableResult
