@@ -494,6 +494,7 @@ app.get("/health", async (c) => {
     revenueCatWebhookSigningConfigured: Boolean(c.env.REVENUECAT_WEBHOOK_SIGNING_SECRET?.trim()),
     billingEnforcementMode: c.env.BILLING_ENFORCEMENT_MODE === "enforce" ? "enforce" : "observe",
     marketDemoEmailVerificationConfigured: isMarketDemoVerificationConfigured(c.env),
+    marketSchemaReady: await isMarketSchemaReady(c.env),
   });
 });
 
@@ -2494,6 +2495,21 @@ function marketDemoVerificationCode(env: Bindings) {
 
 function isMarketDemoVerificationConfigured(env: Bindings) {
   return marketDemoVerificationCode(env) !== null;
+}
+
+// A present DB binding does not prove the marketplace migration was applied to
+// that database. Without this probe a database missing 0002_marketplace_beta.sql
+// still reports a healthy D1 while every market route fails with a 500.
+async function isMarketSchemaReady(env: Bindings) {
+  if (!env.DB) return false;
+  try {
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS present FROM sqlite_master WHERE type = 'table' AND name IN ('market_listings', 'market_threads', 'market_messages', 'market_buyer_identities', 'market_buyer_sessions', 'market_blocks', 'market_reports', 'market_rate_events')",
+    ).first<{ present: number }>();
+    return (row?.present ?? 0) === 8;
+  } catch {
+    return false;
+  }
 }
 
 async function sha256Hex(value: string) {
