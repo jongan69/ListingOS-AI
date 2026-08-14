@@ -1,0 +1,18 @@
+{
+  "expires": "2026-09-30",
+  "rationale": "The only remaining high advisories are in image-size through Expo and React Native Metro build tooling. The shipped app does not expose Metro asset inspection to remote user input. This exception is exact, owned, and time-limited; CI rejects a changed advisory set or any additional high or critical finding.",
+  "blockedUpgradePaths": [
+    {
+      "package": "image-size",
+      "blockedBy": "The npm registry currently reports 2.0.2 as the latest image-size release, while both advisories affect versions through 2.0.2.",
+      "revisitWhen": "A patched image-size release and compatible Metro call sites are available."
+    }
+  ],
+  "highSeverityExceptions": [
+    {
+      "package": "image-size",
+      "advisoryIds": [1138808, 1138809],
+      "issue": "https://github.com/jongan69/ListingOS-AI/issues/8"
+    }
+  ]
+}
