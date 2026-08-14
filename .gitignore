@@ -3,6 +3,12 @@
 # dependencies
 node_modules/
 
+# Bun is the only supported package manager. Ignoring the npm and yarn lock
+# files keeps a stray `npm install` from committing a second lockfile, which
+# breaks package manager inference on EAS Build.
+package-lock.json
+yarn.lock
+
 # Expo
 .expo/
 dist/

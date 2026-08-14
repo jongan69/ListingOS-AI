@@ -14,11 +14,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npx expo-doctor
-      - run: npm run worker:check
-      - run: npx expo export --platform web
-      - run: npm run export:updates
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bunx expo-doctor
+      - run: bun run worker:check
+      - run: bunx expo export --platform web
+      - run: bun run export:updates

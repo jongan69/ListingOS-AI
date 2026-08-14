@@ -196,6 +196,7 @@ ListingOS is a working MVP, not a finished multi-marketplace production platform
 ### Prerequisites
 
 - Node.js compatible with Expo SDK 57
+- Bun 1.3 or newer, which manages dependencies and runs the package scripts
 - Android Studio and the Android SDK for local Android builds
 - A Cloudflare account with Workers, D1, KV, R2, and Queues
 - OpenAI and eBay sandbox or production credentials
@@ -204,8 +205,8 @@ ListingOS is a working MVP, not a finished multi-marketplace production platform
 ### Install and validate
 
 ```bash
-npm install
-npm run check
+bun install
+bun run check
 ```
 
 ### Run the mobile app
