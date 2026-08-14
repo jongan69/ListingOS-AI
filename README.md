@@ -196,16 +196,17 @@ ListingOS is a working MVP, not a finished multi-marketplace production platform
 ### Prerequisites
 
 - Node.js compatible with Expo SDK 57
+- Bun 1.3 or newer, which manages dependencies and runs the package scripts
 - Android Studio and the Android SDK for local Android builds
 - A Cloudflare account with Workers, D1, KV, R2, and Queues
 - OpenAI and eBay sandbox or production credentials
-- Wrangler authenticated with `npx wrangler login`
+- Wrangler authenticated with `bun x wrangler login`
 
 ### Install and validate
 
 ```bash
-npm install
-npm run check
+bun install
+bun run check
 ```
 
 ### Run the mobile app
@@ -217,19 +218,19 @@ The default client configuration points to the deployed Worker defined in `src/c
 Start the Expo development-client server:
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 Use tunnel mode when the test device cannot reach the development server over the local network:
 
 ```bash
-npm run dev:tunnel
+bun run dev:tunnel
 ```
 
 For a direct native Android build:
 
 ```bash
-npm run android
+bun run android
 ```
 
 An optional build-time API override can be placed in `.env`:
@@ -244,8 +245,8 @@ There is intentionally no backend URL input in the seller-facing UI.
 
 ```bash
 cp .dev.vars.example .dev.vars
-npm run db:migrate:local
-npm run worker:dev
+bun run db:migrate:local
+bun run worker:dev
 ```
 
 Local Worker execution is useful for route development and isolated backend testing.
@@ -300,40 +301,40 @@ ListingOS-Hackathon-Demo-Assets/
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Start one clean Expo development-client server |
-| `npm run dev:tunnel` | Start the development client in tunnel mode with a cleared cache |
-| `npm run android` | Build and run the native Android application |
-| `npm run lint` | Run ESLint using the Expo flat configuration |
-| `npm run check:docs` | Verify every tracked local Markdown link |
-| `npm run typecheck` | Check the mobile and Worker TypeScript projects |
-| `npm run doctor` | Run Expo dependency and configuration diagnostics |
-| `npm run check` | Run the standard local validation gate |
-| `npm run web:verify` | Run application checks, a Worker dry run, and the production web export |
-| `npm run verify:submission` | Run application checks, a Worker dry run, and the Android production export |
+| `bun run dev` | Start one clean Expo development-client server |
+| `bun run dev:tunnel` | Start the development client in tunnel mode with a cleared cache |
+| `bun run android` | Build and run the native Android application |
+| `bun run lint` | Run ESLint using the Expo flat configuration |
+| `bun run check:docs` | Verify every tracked local Markdown link |
+| `bun run typecheck` | Check the mobile and Worker TypeScript projects |
+| `bun run doctor` | Run Expo dependency and configuration diagnostics |
+| `bun run check` | Run the standard local validation gate |
+| `bun run web:verify` | Run application checks, a Worker dry run, and the production web export |
+| `bun run verify:submission` | Run application checks, a Worker dry run, and the Android production export |
 
 ### Builds and releases
 
 | Command | Purpose |
 | --- | --- |
-| `npm run export:android` | Produce a production Android JavaScript export |
-| `npm run export:updates` | Validate iOS and Android OTA bundles locally |
-| `npm run eas:update:preview -- --message "description"` | Publish an OTA update to preview testers |
-| `npm run eas:update:production -- --message "description"` | Publish an approved OTA update to production |
-| `npm run build:android:release` | Build the standalone Android release APK |
-| `npm run install:android:release` | Install the standalone APK on a connected Android device |
-| `npm run open:android` | Launch the installed ListingOS application |
-| `npm run web:serve` | Serve the exported production web application locally |
+| `bun run export:android` | Produce a production Android JavaScript export |
+| `bun run export:updates` | Validate iOS and Android OTA bundles locally |
+| `bun run eas:update:preview -- --message "description"` | Publish an OTA update to preview testers |
+| `bun run eas:update:production -- --message "description"` | Publish an approved OTA update to production |
+| `bun run build:android:release` | Build the standalone Android release APK |
+| `bun run install:android:release` | Install the standalone APK on a connected Android device |
+| `bun run open:android` | Launch the installed ListingOS application |
+| `bun run web:serve` | Serve the exported production web application locally |
 
 ### Worker and data
 
 | Command | Purpose |
 | --- | --- |
-| `npm run worker:dev` | Start the Worker locally on port 8787 |
-| `npm run worker:check` | Type-check and dry-run bundle the Worker |
-| `npm run worker:deploy` | Type-check and deploy the Worker |
-| `npm run worker:tail` | Stream logs from the deployed Worker |
-| `npm run db:migrate:local` | Apply D1 migrations to the local database |
-| `npm run db:migrate:remote` | Apply D1 migrations to the configured remote database |
+| `bun run worker:dev` | Start the Worker locally on port 8787 |
+| `bun run worker:check` | Type-check and dry-run bundle the Worker |
+| `bun run worker:deploy` | Type-check and deploy the Worker |
+| `bun run worker:tail` | Stream logs from the deployed Worker |
+| `bun run db:migrate:local` | Apply D1 migrations to the local database |
+| `bun run db:migrate:remote` | Apply D1 migrations to the configured remote database |
 
 ## Documentation
 

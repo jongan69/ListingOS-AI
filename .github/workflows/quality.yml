@@ -24,7 +24,7 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
       - run: bun run audit:high
-      - run: bun x expo-doctor
+      - run: bun run doctor
       - run: bun run test:worker-security
       - run: bun run worker:check
       - run: bun x expo export --platform web
