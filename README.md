@@ -200,7 +200,7 @@ ListingOS is a working MVP, not a finished multi-marketplace production platform
 - Android Studio and the Android SDK for local Android builds
 - A Cloudflare account with Workers, D1, KV, R2, and Queues
 - OpenAI and eBay sandbox or production credentials
-- Wrangler authenticated with `bunx wrangler login`
+- Wrangler authenticated with `bun x wrangler login`
 
 ### Install and validate
 

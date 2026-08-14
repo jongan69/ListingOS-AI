@@ -88,7 +88,7 @@ and returns `false` when any is missing.
 This requires Cloudflare credentials and must be run by the account owner:
 
 ~~~bash
-bunx wrangler d1 migrations list seller-ai-db --remote   # expect 0002_marketplace_beta.sql pending
+bun x wrangler d1 migrations list seller-ai-db --remote   # expect 0002_marketplace_beta.sql pending
 bun run db:migrate:remote
 ~~~
 
