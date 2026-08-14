@@ -59,6 +59,7 @@ import {
   type PricingStrategy,
 } from "../src/shared/contracts";
 import { partitionPhotosIntoProducts, recordPublishOutcome } from "./listing-intelligence";
+import { decodeXmlText, isAllowedEbayImageUrl } from "./security-utils";
 import type {
   BatchPhotoRecord,
   Bindings,
@@ -4846,16 +4847,6 @@ async function createWarehouseLocation(
   }
 }
 
-function decodeXmlText(value: string) {
-  return value
-    .replace(/^<!\[CDATA\[|\]\]>$/g, "")
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", "\"")
-    .replaceAll("&apos;", "'");
-}
-
 async function applyDraftResolutionValues(env: Bindings, draftId: string, values: Record<string, unknown>) {
   const row = await env.DB.prepare("SELECT payload_json, seller_account_id FROM drafts WHERE id = ?")
     .bind(draftId).first<{ payload_json: string; seller_account_id: string }>();
@@ -5006,7 +4997,7 @@ async function createEbayImageFromUrl(env: Bindings, accessToken: string, imageU
     throw new Error("eBay image ingestion succeeded without returning an EPS image URL.");
   }
   const parsedUrl = new URL(epsUrl);
-  if (parsedUrl.protocol !== "https:" || !parsedUrl.hostname.endsWith("ebayimg.com")) {
+  if (!isAllowedEbayImageUrl(parsedUrl)) {
     throw new Error("eBay image ingestion returned an invalid EPS image URL.");
   }
   return epsUrl;
