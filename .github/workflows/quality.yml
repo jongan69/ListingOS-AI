@@ -20,7 +20,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run typecheck
-      - run: bunx expo-doctor
+      - run: bun run doctor
       - run: bun run worker:check
       - run: bunx expo export --platform web
       - run: bun run export:updates

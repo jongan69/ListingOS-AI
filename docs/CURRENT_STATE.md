@@ -88,19 +88,19 @@ and returns `false` when any is missing.
 This requires Cloudflare credentials and must be run by the account owner:
 
 ~~~bash
-npx wrangler d1 migrations list seller-ai-db --remote   # expect 0002_marketplace_beta.sql pending
-npm run db:migrate:remote
+bunx wrangler d1 migrations list seller-ai-db --remote   # expect 0002_marketplace_beta.sql pending
+bun run db:migrate:remote
 ~~~
 
 Then confirm, without redeploying the Worker:
 
 ~~~bash
-curl -s .../health | grep marketSchemaReady          # expect true
+curl -fsS .../health | grep -oE '"marketSchemaReady":[^,}]*'   # expect "marketSchemaReady":true
 curl -s -o /dev/null -w '%{http_code}' .../api/public/market/listings   # expect 200
 ~~~
 
-Deploy the Worker first only if `marketSchemaReady` is absent from the health response, which
-means the deployed build predates the probe.
+That `grep` prints nothing at all when the field is absent, as opposed to printing `false`. Deploy
+the Worker first only in that no-output case, which means the deployed build predates the probe.
 
 ### Note on the duplicate migration prefix
 
@@ -177,8 +177,8 @@ returned 200 on the same day its feed API was returning 500.
 Proof Mode must be enabled explicitly for the command being run:
 
 ~~~bash
-EXPO_PUBLIC_PROOF_MODE=true npm run web:export
-EXPO_PUBLIC_PROOF_MODE=true npm run web:deploy:production
+EXPO_PUBLIC_PROOF_MODE=true bun run web:export
+EXPO_PUBLIC_PROOF_MODE=true bun run web:deploy:production
 ~~~
 
 The convenience script names do not set EXPO_PUBLIC_PROOF_MODE themselves. Keep Proof Mode disabled in native production profiles.
